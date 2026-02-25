@@ -140,12 +140,9 @@ Output: ssh.Session.Stdout → terminalWriter.Write() → tea.Program.Send(Termi
 
 ## Focus & Input Routing
 
-The `focus` field on `AppModel` determines keystroke routing in `stateMain`:
+In `stateMain`, keys are dispatched to `FileBrowserModel.Update()` for cursor movement, directory navigation, and transfer commands. `Tab` and `Ctrl+←/→` switch between local and remote panels within the file browser.
 
-- **`paneTerminal`** — Keys are converted via `keyToBytes()` and written to SSH stdin. The terminal receives raw ANSI sequences.
-- **`paneFileBrowser`** — Keys are dispatched to `FileBrowserModel.Update()` for cursor movement, directory navigation, and transfer commands.
-
-`Ctrl+T` toggles between panes. Within the file browser, `Tab` switches between local and remote panels.
+`Ctrl+T` cycles through open connection tabs.
 
 ## Tab Management
 

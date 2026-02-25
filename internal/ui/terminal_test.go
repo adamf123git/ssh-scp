@@ -268,3 +268,82 @@ func TestTerminalModelAppendOutputMultiple(t *testing.T) {
 		t.Error("should have output after many appends")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// SetStdinForTest
+// ---------------------------------------------------------------------------
+
+func TestSetStdinForTest(t *testing.T) {
+	_, w := io.Pipe()
+	m := NewTerminalModel(nil)
+	m.SetStdinForTest(w)
+	if m.stdin != w {
+		t.Error("SetStdinForTest did not set stdin")
+	}
+	_ = w.Close()
+}
+
+// ---------------------------------------------------------------------------
+// Resize with session=nil does not error
+// ---------------------------------------------------------------------------
+
+func TestTerminalModelResizeNoSession(t *testing.T) {
+	m := NewTerminalModel(nil)
+	m.Resize(80, 24) // should set dims without error
+	if m.width != 80 || m.height != 24 {
+		t.Errorf("dims = %dx%d, want 80x24", m.width, m.height)
+	}
+	if m.err != "" {
+		t.Errorf("err should be empty, got %q", m.err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Close with stdin only (no session)
+// ---------------------------------------------------------------------------
+
+func TestTerminalModelCloseStdinOnly(t *testing.T) {
+	_, w := io.Pipe()
+	m := &TerminalModel{stdin: w}
+	err := m.Close()
+	if err != nil {
+		t.Errorf("Close with stdin-only should succeed, got %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Write returns nil when stdin is nil
+// ---------------------------------------------------------------------------
+
+func TestTerminalModelWriteNoStdinReturnsNil(t *testing.T) {
+	m := &TerminalModel{}
+	if err := m.Write([]byte("test")); err != nil {
+		t.Errorf("Write nil stdin = %v, want nil", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// RenderTerminal inactive with content
+// ---------------------------------------------------------------------------
+
+func TestTerminalModelRenderInactiveWithContent(t *testing.T) {
+	m := &TerminalModel{}
+	m.AppendOutput([]byte("hello\nworld\n"))
+	view := m.RenderTerminal(false, 80, 24)
+	if !strings.Contains(view, "hello") {
+		t.Error("inactive view should contain output")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// RenderTerminal with only error (no output)
+// ---------------------------------------------------------------------------
+
+func TestTerminalModelRenderActiveError(t *testing.T) {
+	m := &TerminalModel{}
+	m.SetError("broken")
+	view := m.RenderTerminal(true, 80, 24)
+	if !strings.Contains(view, "broken") {
+		t.Error("active error view should contain error text")
+	}
+}

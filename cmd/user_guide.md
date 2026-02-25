@@ -76,14 +76,9 @@ After connecting, the screen is split into three sections:
 
 ### Focus
 
-The interface has two focus zones:
+The main view shows a dual-pane file browser for managing files. Use **Ctrl+←/→** or **Tab** to switch between the local and remote panels. The active panel is highlighted with a purple border.
 
-- **Terminal** (default) — Keystrokes are sent directly to the remote shell
-- **File browser** — Keystrokes control the file browser panels
-
-Press **Ctrl+T** to toggle between them. The active pane is highlighted with a purple border.
-
-When the terminal is focused, it behaves like a normal SSH session — you can run commands, use tab completion, navigate with arrow keys, and use Ctrl shortcuts (Ctrl+C, Ctrl+D, Ctrl+Z, etc.).
+When you have multiple connections open, press **Ctrl+T** to cycle through tabs.
 
 ## File Browser
 
@@ -147,13 +142,13 @@ Press **?** to toggle a help overlay showing all key bindings. Press **?** again
 
 ### Main View — Global
 
-| Key      | Action                                |
-| -------- | ------------------------------------- |
-| `Ctrl+T` | Toggle focus: terminal ↔ file browser |
-| `Ctrl+N` | New connection tab                    |
-| `Ctrl+W` | Close current tab                     |
-| `?`      | Toggle help overlay                   |
-| `Ctrl+C` | Quit (closes all connections)         |
+| Key      | Action                        |
+| -------- | ----------------------------- |
+| `Ctrl+T` | Switch to next connection tab |
+| `Ctrl+N` | New connection tab            |
+| `Ctrl+W` | Close current tab             |
+| `?`      | Toggle help overlay           |
+| `Ctrl+C` | Quit (closes all connections) |
 
 ### Main View — File Browser (when focused)
 

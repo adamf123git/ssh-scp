@@ -1,9 +1,14 @@
 package ssh
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"os"
 	"strings"
 	"testing"
+
+	gossh "golang.org/x/crypto/ssh"
 )
 
 // ---------------------------------------------------------------------------
@@ -336,4 +341,183 @@ func TestRemoteFileFields(t *testing.T) {
 	if f.Name != "test.txt" || f.Size != 1024 || f.IsDir {
 		t.Errorf("RemoteFile fields not set correctly: %+v", f)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// parseAlgorithms
+// ---------------------------------------------------------------------------
+
+func TestParseAlgorithmsEmpty(t *testing.T) {
+	got := parseAlgorithms("")
+	if got != nil {
+		t.Errorf("parseAlgorithms(\"\") = %v, want nil", got)
+	}
+}
+
+func TestParseAlgorithmsPlain(t *testing.T) {
+	got := parseAlgorithms("ssh-ed25519,rsa-sha2-256")
+	if len(got) != 2 {
+		t.Fatalf("expected 2 algos, got %d: %v", len(got), got)
+	}
+	if got[0] != "ssh-ed25519" || got[1] != "rsa-sha2-256" {
+		t.Errorf("unexpected algos: %v", got)
+	}
+}
+
+func TestParseAlgorithmsAppendPrefix(t *testing.T) {
+	got := parseAlgorithms("+ssh-rsa")
+	// Should prepend defaults and then append ssh-rsa
+	if len(got) < 2 {
+		t.Fatalf("expected defaults + appended, got %d: %v", len(got), got)
+	}
+	// The last element should be the appended one
+	if got[len(got)-1] != "ssh-rsa" {
+		t.Errorf("last algo = %q, want %q", got[len(got)-1], "ssh-rsa")
+	}
+	// First should be a default (ssh-ed25519)
+	if got[0] != "ssh-ed25519" {
+		t.Errorf("first algo = %q, want %q", got[0], "ssh-ed25519")
+	}
+}
+
+func TestParseAlgorithmsWhitespace(t *testing.T) {
+	got := parseAlgorithms("  ssh-ed25519 , rsa-sha2-256  ")
+	if len(got) != 2 {
+		t.Fatalf("expected 2 algos, got %d: %v", len(got), got)
+	}
+	if got[0] != "ssh-ed25519" || got[1] != "rsa-sha2-256" {
+		t.Errorf("unexpected algos: %v", got)
+	}
+}
+
+func TestParseAlgorithmsEmptyElements(t *testing.T) {
+	got := parseAlgorithms("ssh-ed25519,,rsa-sha2-256")
+	// empty element between commas should be skipped
+	if len(got) != 2 {
+		t.Fatalf("expected 2 algos, got %d: %v", len(got), got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// PasswordCallbackAuth / KeyboardInteractiveAuth / SSHClient
+// ---------------------------------------------------------------------------
+
+func TestPasswordCallbackAuth(t *testing.T) {
+	am := PasswordCallbackAuth(func() (string, error) { return "pw", nil })
+	if am == nil {
+		t.Fatal("PasswordCallbackAuth returned nil")
+	}
+}
+
+func TestKeyboardInteractiveAuth(t *testing.T) {
+	am := KeyboardInteractiveAuth(func(user, instruction string, questions []string, echos []bool) ([]string, error) {
+		return nil, nil
+	})
+	if am == nil {
+		t.Fatal("KeyboardInteractiveAuth returned nil")
+	}
+}
+
+func TestSSHClientAccessor(t *testing.T) {
+	c := &Client{client: nil}
+	if c.SSHClient() != nil {
+		t.Error("SSHClient should return nil when client is nil")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AgentAuth
+// ---------------------------------------------------------------------------
+
+func TestAgentAuthNoSocket(t *testing.T) {
+	t.Setenv("SSH_AUTH_SOCK", "")
+	_, err := AgentAuth()
+	if err == nil {
+		t.Error("AgentAuth without SSH_AUTH_SOCK should fail")
+	}
+}
+
+func TestAgentAuthBadSocket(t *testing.T) {
+	t.Setenv("SSH_AUTH_SOCK", "/nonexistent/ssh-agent.sock")
+	_, err := AgentAuth()
+	if err == nil {
+		t.Error("AgentAuth with bad socket should fail")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DefaultKeyPaths
+// ---------------------------------------------------------------------------
+
+func TestDefaultKeyPaths(t *testing.T) {
+	// Just verify it doesn't panic and returns a slice
+	paths := DefaultKeyPaths()
+	// paths may be empty or non-empty depending on the system
+	_ = paths
+}
+
+// ---------------------------------------------------------------------------
+// Close with jumpClient
+// ---------------------------------------------------------------------------
+
+func TestCloseWithNilJumpClient(t *testing.T) {
+	// A Client whose underlying ssh.Client is nil will panic on Close
+	// but jumpClient=nil path should not add errors
+	c := &Client{jumpClient: nil}
+	// We can't call Close() on a nil c.client, so just verify the field
+	if c.jumpClient != nil {
+		t.Error("jumpClient should be nil")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ConnectOptions struct
+// ---------------------------------------------------------------------------
+
+func TestConnectOptionsFields(t *testing.T) {
+	opts := ConnectOptions{
+		HostKeyAlgorithms:     "ssh-ed25519",
+		PubkeyAcceptedTypes:   "ssh-ed25519",
+		StrictHostKeyChecking: "no",
+		UserKnownHostsFile:    "/dev/null",
+	}
+	if opts.HostKeyAlgorithms != "ssh-ed25519" {
+		t.Error("HostKeyAlgorithms not set")
+	}
+	if opts.StrictHostKeyChecking != "no" {
+		t.Error("StrictHostKeyChecking not set")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// PubKeyAuth with valid ed25519 key
+// ---------------------------------------------------------------------------
+
+func TestPubKeyAuthValidKey(t *testing.T) {
+	dir := t.TempDir()
+	keyFile := dir + "/id_ed25519"
+	key := generateTestEd25519PEM(t)
+	if err := os.WriteFile(keyFile, key, 0600); err != nil {
+		t.Fatal(err)
+	}
+	am, err := PubKeyAuth(keyFile)
+	if err != nil {
+		t.Fatalf("PubKeyAuth with valid key: %v", err)
+	}
+	if am == nil {
+		t.Error("PubKeyAuth should return non-nil AuthMethod")
+	}
+}
+
+func generateTestEd25519PEM(t *testing.T) []byte {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pemBlock, err := gossh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pem.EncodeToMemory(pemBlock)
 }

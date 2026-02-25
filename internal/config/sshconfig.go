@@ -10,11 +10,16 @@ import (
 
 // SSHHost represents a single Host block from ~/.ssh/config.
 type SSHHost struct {
-	Alias        string // the Host alias (e.g. "myserver")
-	HostName     string // HostName directive (actual hostname / IP)
-	Port         string // Port directive (default "22")
-	User         string // User directive
-	IdentityFile string // IdentityFile path (~ expanded)
+	Alias                 string // the Host alias (e.g. "myserver")
+	HostName              string // HostName directive (actual hostname / IP)
+	Port                  string // Port directive (default "22")
+	User                  string // User directive
+	IdentityFile          string // IdentityFile path (~ expanded)
+	HostKeyAlgorithms     string // HostKeyAlgorithms directive (comma-separated)
+	PubkeyAcceptedTypes   string // PubkeyAcceptedKeyTypes / PubkeyAcceptedAlgorithms
+	StrictHostKeyChecking string // StrictHostKeyChecking (yes/no/ask)
+	UserKnownHostsFile    string // UserKnownHostsFile path
+	ProxyJump             string // ProxyJump directive (user@host:port)
 }
 
 // DisplayHost returns the effective hostname (HostName if set, otherwise Alias).
@@ -33,11 +38,16 @@ func (h SSHHost) ToConnection() Connection {
 		port = "22"
 	}
 	return Connection{
-		Name:     h.Alias,
-		Host:     host,
-		Port:     port,
-		Username: h.User,
-		KeyPath:  h.IdentityFile,
+		Name:                  h.Alias,
+		Host:                  host,
+		Port:                  port,
+		Username:              h.User,
+		KeyPath:               h.IdentityFile,
+		HostKeyAlgorithms:     h.HostKeyAlgorithms,
+		PubkeyAcceptedTypes:   h.PubkeyAcceptedTypes,
+		StrictHostKeyChecking: h.StrictHostKeyChecking,
+		UserKnownHostsFile:    h.UserKnownHostsFile,
+		ProxyJump:             h.ProxyJump,
 	}
 }
 
@@ -69,6 +79,7 @@ func LoadSSHConfigFrom(path string) []SSHHost {
 func ParseSSHConfig(r io.Reader) []SSHHost {
 	var hosts []SSHHost
 	var current *SSHHost
+	var wildcard SSHHost // holds Host * defaults
 
 	home, _ := os.UserHomeDir()
 
@@ -92,6 +103,8 @@ func ParseSSHConfig(r io.Reader) []SSHHost {
 			// Finish previous host block.
 			if current != nil && !isWildcard(current.Alias) {
 				hosts = append(hosts, *current)
+			} else if current != nil && isWildcard(current.Alias) {
+				wildcard = *current
 			}
 			current = &SSHHost{Alias: value}
 
@@ -111,15 +124,83 @@ func ParseSSHConfig(r io.Reader) []SSHHost {
 			if current != nil {
 				current.IdentityFile = expandTilde(value, home)
 			}
+		case "hostkeyalgorithms":
+			if current != nil {
+				current.HostKeyAlgorithms = value
+			}
+		case "pubkeyacceptedkeytypes", "pubkeyacceptedalgorithms":
+			if current != nil {
+				current.PubkeyAcceptedTypes = value
+			}
+		case "stricthostkeychecking":
+			if current != nil {
+				current.StrictHostKeyChecking = value
+			}
+		case "userknownhostsfile":
+			if current != nil {
+				current.UserKnownHostsFile = expandTilde(value, home)
+			}
+		case "proxyjump":
+			if current != nil {
+				current.ProxyJump = value
+			}
 		}
 	}
 
 	// Don't forget the last host block.
 	if current != nil && !isWildcard(current.Alias) {
 		hosts = append(hosts, *current)
+	} else if current != nil && isWildcard(current.Alias) {
+		wildcard = *current
+	}
+
+	// Apply Host * defaults to all hosts for empty fields.
+	for i := range hosts {
+		applyDefaults(&hosts[i], &wildcard)
 	}
 
 	return hosts
+}
+
+// applyDefaults fills empty fields in dst from the wildcard defaults.
+func applyDefaults(dst, defaults *SSHHost) {
+	if dst.Port == "" && defaults.Port != "" {
+		dst.Port = defaults.Port
+	}
+	if dst.User == "" && defaults.User != "" {
+		dst.User = defaults.User
+	}
+	if dst.IdentityFile == "" && defaults.IdentityFile != "" {
+		dst.IdentityFile = defaults.IdentityFile
+	}
+	if dst.HostKeyAlgorithms == "" && defaults.HostKeyAlgorithms != "" {
+		dst.HostKeyAlgorithms = defaults.HostKeyAlgorithms
+	}
+	if dst.PubkeyAcceptedTypes == "" && defaults.PubkeyAcceptedTypes != "" {
+		dst.PubkeyAcceptedTypes = defaults.PubkeyAcceptedTypes
+	}
+	if dst.StrictHostKeyChecking == "" && defaults.StrictHostKeyChecking != "" {
+		dst.StrictHostKeyChecking = defaults.StrictHostKeyChecking
+	}
+	if dst.UserKnownHostsFile == "" && defaults.UserKnownHostsFile != "" {
+		dst.UserKnownHostsFile = defaults.UserKnownHostsFile
+	}
+	if dst.ProxyJump == "" && defaults.ProxyJump != "" {
+		dst.ProxyJump = defaults.ProxyJump
+	}
+}
+
+// MatchSSHHost finds the first SSHHost whose Alias or HostName matches the
+// given hostname, and returns a merged copy with wildcard defaults applied.
+// Returns nil if no match is found.
+func MatchSSHHost(hosts []SSHHost, hostname string) *SSHHost {
+	for i := range hosts {
+		if hosts[i].Alias == hostname || hosts[i].HostName == hostname {
+			h := hosts[i]
+			return &h
+		}
+	}
+	return nil
 }
 
 // splitSSHConfigLine splits a line like "HostName example.com" or

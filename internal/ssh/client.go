@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -27,24 +28,51 @@ type RemoteFile struct {
 
 // Client wraps an SSH connection.
 type Client struct {
-	client  *ssh.Client
-	config  *ssh.ClientConfig
-	address string
+	client     *ssh.Client
+	config     *ssh.ClientConfig
+	address    string
+	jumpClient *ssh.Client // non-nil when connected via a jump host
+}
+
+// ConnectOptions holds per-connection SSH options parsed from ~/.ssh/config.
+type ConnectOptions struct {
+	HostKeyAlgorithms     string // comma-separated list, may start with +
+	PubkeyAcceptedTypes   string // comma-separated list, may start with +
+	StrictHostKeyChecking string // "yes", "no", or "ask"
+	UserKnownHostsFile    string // path (e.g. /dev/null)
 }
 
 // New creates a new SSH client connected to host:port with the given auth methods.
-func New(host, port, username string, authMethods []ssh.AuthMethod, hkCallback ssh.HostKeyCallback) (*Client, error) {
+func New(host, port, username string, authMethods []ssh.AuthMethod, hkCallback ssh.HostKeyCallback, opts *ConnectOptions) (*Client, error) {
 	cfg := &ssh.ClientConfig{
 		User:            username,
 		Auth:            authMethods,
 		HostKeyCallback: hkCallback,
 		Timeout:         10 * time.Second,
 	}
+
+	if opts != nil {
+		// Apply HostKeyAlgorithms.
+		if algos := parseAlgorithms(opts.HostKeyAlgorithms); len(algos) > 0 {
+			log.Printf("[SSH] applying HostKeyAlgorithms: %v", algos)
+			cfg.HostKeyAlgorithms = algos
+		}
+
+		// StrictHostKeyChecking=no → accept any host key.
+		if strings.EqualFold(opts.StrictHostKeyChecking, "no") {
+			log.Printf("[SSH] StrictHostKeyChecking=no, accepting all host keys")
+			cfg.HostKeyCallback = ssh.InsecureIgnoreHostKey()
+		}
+	}
+
 	address := net.JoinHostPort(host, port)
+	log.Printf("[SSH] dialing %s as %s (%d auth methods)", address, username, len(authMethods))
 	client, err := ssh.Dial("tcp", address, cfg)
 	if err != nil {
+		log.Printf("[SSH] dial failed: %v", err)
 		return nil, err
 	}
+	log.Printf("[SSH] connected to %s", address)
 	return &Client{
 		client:  client,
 		config:  cfg,
@@ -52,9 +80,106 @@ func New(host, port, username string, authMethods []ssh.AuthMethod, hkCallback s
 	}, nil
 }
 
+// NewViaJump creates a new SSH client by tunnelling through an existing jump
+// host connection. The jumpSSHClient is the underlying *ssh.Client of the
+// bastion/jump host. The returned Client takes ownership of jumpSSHClient and
+// closes it when Close is called.
+func NewViaJump(jumpSSHClient *ssh.Client, host, port, username string, authMethods []ssh.AuthMethod, hkCallback ssh.HostKeyCallback, opts *ConnectOptions) (*Client, error) {
+	cfg := &ssh.ClientConfig{
+		User:            username,
+		Auth:            authMethods,
+		HostKeyCallback: hkCallback,
+		Timeout:         10 * time.Second,
+	}
+
+	if opts != nil {
+		if algos := parseAlgorithms(opts.HostKeyAlgorithms); len(algos) > 0 {
+			log.Printf("[SSH] jump-dest applying HostKeyAlgorithms: %v", algos)
+			cfg.HostKeyAlgorithms = algos
+		}
+		if strings.EqualFold(opts.StrictHostKeyChecking, "no") {
+			log.Printf("[SSH] jump-dest StrictHostKeyChecking=no, accepting all host keys")
+			cfg.HostKeyCallback = ssh.InsecureIgnoreHostKey()
+		}
+	}
+
+	address := net.JoinHostPort(host, port)
+	log.Printf("[SSH] dialing %s through jump host as %s", address, username)
+
+	// Open a TCP connection through the jump host to the destination.
+	netConn, err := jumpSSHClient.Dial("tcp", address)
+	if err != nil {
+		return nil, fmt.Errorf("dial through jump host: %w", err)
+	}
+
+	c, chans, reqs, err := ssh.NewClientConn(netConn, address, cfg)
+	if err != nil {
+		_ = netConn.Close()
+		return nil, err
+	}
+	client := ssh.NewClient(c, chans, reqs)
+	log.Printf("[SSH] connected to %s via jump host", address)
+	return &Client{
+		client:     client,
+		config:     cfg,
+		address:    address,
+		jumpClient: jumpSSHClient,
+	}, nil
+}
+
+// SSHClient returns the underlying *ssh.Client for use with jump host tunnelling.
+func (c *Client) SSHClient() *ssh.Client {
+	return c.client
+}
+
+// parseAlgorithms splits a comma-separated algorithm list.
+// If the value starts with "+", it appends to the default set.
+func parseAlgorithms(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	raw = strings.TrimSpace(raw)
+	append_ := strings.HasPrefix(raw, "+")
+	if append_ {
+		raw = raw[1:]
+	}
+	var algos []string
+	for _, a := range strings.Split(raw, ",") {
+		a = strings.TrimSpace(a)
+		if a != "" {
+			algos = append(algos, a)
+		}
+	}
+	if append_ {
+		// Prepend defaults (Go's crypto/ssh defaults) so the appended ones are additive.
+		defaults := []string{
+			"ssh-ed25519",
+			"ecdsa-sha2-nistp256",
+			"ecdsa-sha2-nistp384",
+			"ecdsa-sha2-nistp521",
+			"rsa-sha2-256",
+			"rsa-sha2-512",
+		}
+		algos = append(defaults, algos...)
+	}
+	return algos
+}
+
 // PasswordAuth returns an AuthMethod for password authentication.
 func PasswordAuth(password string) ssh.AuthMethod {
 	return ssh.Password(password)
+}
+
+// PasswordCallbackAuth returns an AuthMethod that obtains the password
+// on demand by calling the provided function.
+func PasswordCallbackAuth(callback func() (string, error)) ssh.AuthMethod {
+	return ssh.PasswordCallback(callback)
+}
+
+// KeyboardInteractiveAuth returns an AuthMethod that answers
+// keyboard-interactive challenges via the given callback.
+func KeyboardInteractiveAuth(challenge func(user, instruction string, questions []string, echos []bool) ([]string, error)) ssh.AuthMethod {
+	return ssh.KeyboardInteractive(challenge)
 }
 
 // PubKeyAuth returns an AuthMethod for public key authentication from a key file.
@@ -108,9 +233,13 @@ func DefaultKeyPaths() []string {
 	return found
 }
 
-// Close closes the SSH connection.
+// Close closes the SSH connection and any underlying jump host connection.
 func (c *Client) Close() error {
-	return c.client.Close()
+	err := c.client.Close()
+	if c.jumpClient != nil {
+		err = errors.Join(err, c.jumpClient.Close())
+	}
+	return err
 }
 
 // NewSession creates a new SSH session.
@@ -146,12 +275,13 @@ func (c *Client) ResizePty(session *ssh.Session, width, height int) error {
 
 // ListDir lists the contents of a remote directory.
 func (c *Client) ListDir(path string) (files []RemoteFile, retErr error) {
+	log.Printf("[SSH] listing remote dir: %s", path)
 	session, err := c.client.NewSession()
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if cErr := session.Close(); cErr != nil {
+		if cErr := session.Close(); cErr != nil && !errors.Is(cErr, io.EOF) {
 			retErr = errors.Join(retErr, fmt.Errorf("close session: %w", cErr))
 		}
 	}()
@@ -168,6 +298,7 @@ func (c *Client) ListDir(path string) (files []RemoteFile, retErr error) {
 
 // UploadFile uploads a local file to the remote destination path.
 func (c *Client) UploadFile(localPath, remotePath string) (retErr error) {
+	log.Printf("[SSH] uploading %s -> %s", localPath, remotePath)
 	scpClient, err := scp.NewClientBySSH(c.client)
 	if err != nil {
 		return err
@@ -194,6 +325,7 @@ func (c *Client) UploadFile(localPath, remotePath string) (retErr error) {
 
 // DownloadFile downloads a remote file to a local destination path.
 func (c *Client) DownloadFile(remotePath, localDir string) (retErr error) {
+	log.Printf("[SSH] downloading %s -> %s", remotePath, localDir)
 	scpClient, err := scp.NewClientBySSH(c.client)
 	if err != nil {
 		return err

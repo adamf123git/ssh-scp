@@ -3,7 +3,7 @@ package main
 import (
 	"crypto/ed25519"
 	"crypto/rand"
-	"io"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -14,185 +14,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	gossh "golang.org/x/crypto/ssh"
 )
-
-// ---------------------------------------------------------------------------
-// keyToBytes
-// ---------------------------------------------------------------------------
-
-func TestKeyToBytesEnter(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyEnter})
-	if len(got) != 1 || got[0] != '\r' {
-		t.Errorf("Enter = %v, want [\\r]", got)
-	}
-}
-
-func TestKeyToBytesBackspace(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyBackspace})
-	if len(got) != 1 || got[0] != 127 {
-		t.Errorf("Backspace = %v, want [127]", got)
-	}
-}
-
-func TestKeyToBytesDelete(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyDelete})
-	if len(got) != 4 {
-		t.Errorf("Delete = %v, want 4 bytes", got)
-	}
-	if got[0] != '\x1b' || got[1] != '[' || got[2] != '3' || got[3] != '~' {
-		t.Errorf("Delete = %v, want ESC[3~", got)
-	}
-}
-
-func TestKeyToBytesTab(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyTab})
-	if len(got) != 1 || got[0] != '\t' {
-		t.Errorf("Tab = %v, want [\\t]", got)
-	}
-}
-
-func TestKeyToBytesSpace(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeySpace})
-	if len(got) != 1 || got[0] != ' ' {
-		t.Errorf("Space = %v, want [ ]", got)
-	}
-}
-
-func TestKeyToBytesEscape(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyEscape})
-	if len(got) != 1 || got[0] != '\x1b' {
-		t.Errorf("Escape = %v, want [ESC]", got)
-	}
-}
-
-func TestKeyToBytesCtrlC(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyCtrlC})
-	if len(got) != 1 || got[0] != 3 {
-		t.Errorf("CtrlC = %v, want [3]", got)
-	}
-}
-
-func TestKeyToBytesCtrlD(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyCtrlD})
-	if len(got) != 1 || got[0] != 4 {
-		t.Errorf("CtrlD = %v, want [4]", got)
-	}
-}
-
-func TestKeyToBytesCtrlZ(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyCtrlZ})
-	if len(got) != 1 || got[0] != 26 {
-		t.Errorf("CtrlZ = %v, want [26]", got)
-	}
-}
-
-func TestKeyToBytesCtrlA(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyCtrlA})
-	if len(got) != 1 || got[0] != 1 {
-		t.Errorf("CtrlA = %v, want [1]", got)
-	}
-}
-
-func TestKeyToBytesCtrlE(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyCtrlE})
-	if len(got) != 1 || got[0] != 5 {
-		t.Errorf("CtrlE = %v, want [5]", got)
-	}
-}
-
-func TestKeyToBytesCtrlK(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyCtrlK})
-	if len(got) != 1 || got[0] != 11 {
-		t.Errorf("CtrlK = %v, want [11]", got)
-	}
-}
-
-func TestKeyToBytesCtrlU(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyCtrlU})
-	if len(got) != 1 || got[0] != 21 {
-		t.Errorf("CtrlU = %v, want [21]", got)
-	}
-}
-
-func TestKeyToBytesCtrlW(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyCtrlW})
-	if len(got) != 1 || got[0] != 23 {
-		t.Errorf("CtrlW = %v, want [23]", got)
-	}
-}
-
-func TestKeyToBytesArrows(t *testing.T) {
-	tests := []struct {
-		key  tea.KeyType
-		seq  []byte
-		name string
-	}{
-		{tea.KeyUp, []byte{'\x1b', '[', 'A'}, "Up"},
-		{tea.KeyDown, []byte{'\x1b', '[', 'B'}, "Down"},
-		{tea.KeyRight, []byte{'\x1b', '[', 'C'}, "Right"},
-		{tea.KeyLeft, []byte{'\x1b', '[', 'D'}, "Left"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := keyToBytes(tea.KeyMsg{Type: tt.key})
-			if len(got) != len(tt.seq) {
-				t.Fatalf("%s: len=%d, want %d", tt.name, len(got), len(tt.seq))
-			}
-			for i := range got {
-				if got[i] != tt.seq[i] {
-					t.Errorf("%s byte[%d]=%d, want %d", tt.name, i, got[i], tt.seq[i])
-				}
-			}
-		})
-	}
-}
-
-func TestKeyToBytesHomeEnd(t *testing.T) {
-	home := keyToBytes(tea.KeyMsg{Type: tea.KeyHome})
-	if len(home) != 3 || home[2] != 'H' {
-		t.Errorf("Home = %v, want ESC[H", home)
-	}
-	end := keyToBytes(tea.KeyMsg{Type: tea.KeyEnd})
-	if len(end) != 3 || end[2] != 'F' {
-		t.Errorf("End = %v, want ESC[F", end)
-	}
-}
-
-func TestKeyToBytesPgUpDown(t *testing.T) {
-	up := keyToBytes(tea.KeyMsg{Type: tea.KeyPgUp})
-	if len(up) != 4 || up[2] != '5' {
-		t.Errorf("PgUp = %v, want ESC[5~", up)
-	}
-	down := keyToBytes(tea.KeyMsg{Type: tea.KeyPgDown})
-	if len(down) != 4 || down[2] != '6' {
-		t.Errorf("PgDown = %v, want ESC[6~", down)
-	}
-}
-
-func TestKeyToBytesRunes(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hello")})
-	if string(got) != "hello" {
-		t.Errorf("Runes = %q, want %q", string(got), "hello")
-	}
-}
-
-func TestKeyToBytesSingleChar(t *testing.T) {
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	if string(got) != "a" {
-		t.Errorf("single rune = %q, want %q", string(got), "a")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// hostKeyPendingError
-// ---------------------------------------------------------------------------
-
-func TestHostKeyPendingErrorMessage(t *testing.T) {
-	err := &hostKeyPendingError{hostname: "example.com:22"}
-	got := err.Error()
-	if got != "host key verification required for example.com:22" {
-		t.Errorf("Error() = %q", got)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // initialModel
@@ -229,15 +50,6 @@ func TestAppStateConstants(t *testing.T) {
 	}
 	if stateHostKeyPrompt != 2 {
 		t.Errorf("stateHostKeyPrompt = %d, want 2", stateHostKeyPrompt)
-	}
-}
-
-func TestFocusPaneConstants(t *testing.T) {
-	if paneTerminal != 0 {
-		t.Errorf("paneTerminal = %d, want 0", paneTerminal)
-	}
-	if paneFileBrowser != 1 {
-		t.Errorf("paneFileBrowser = %d, want 1", paneFileBrowser)
 	}
 }
 
@@ -308,25 +120,6 @@ func TestAppModelUpdateHelpToggle(t *testing.T) {
 	}
 }
 
-func TestAppModelUpdateCtrlT(t *testing.T) {
-	m := initialModel()
-	m.state = stateMain
-	m.focus = paneTerminal
-
-	msg := tea.KeyMsg{Type: tea.KeyCtrlT}
-	result, _ := m.Update(msg)
-	am := result.(AppModel)
-	if am.focus != paneFileBrowser {
-		t.Errorf("Ctrl+T should toggle to file browser, got %d", am.focus)
-	}
-
-	result, _ = am.Update(msg)
-	am = result.(AppModel)
-	if am.focus != paneTerminal {
-		t.Errorf("Ctrl+T should toggle back to terminal, got %d", am.focus)
-	}
-}
-
 func TestAppModelUpdateHostKeyReject(t *testing.T) {
 	m := initialModel()
 	m.state = stateHostKeyPrompt
@@ -345,7 +138,7 @@ func TestAppModelUpdateHostKeyReject(t *testing.T) {
 
 func TestAppModelUpdateConnFailed(t *testing.T) {
 	m := initialModel()
-	msg := connectedMsg{err: &hostKeyPendingError{hostname: "h"}, conn: config.Connection{}}
+	msg := connectedMsg{err: fmt.Errorf("connection refused"), conn: config.Connection{}}
 	result, _ := m.Update(msg)
 	am := result.(AppModel)
 	if am.state != stateConnection {
@@ -370,7 +163,6 @@ func TestAppModelCloseTabSwitchesToConnection(t *testing.T) {
 	m.state = stateMain
 	m.tabs = []ui.Tab{{Title: "t1", Connected: true}}
 	m.clients = []*sshclient.Client{nil}
-	m.terminals = []*ui.TerminalModel{nil}
 	m.browsers = []ui.FileBrowserModel{{}}
 
 	msg := tea.KeyMsg{Type: tea.KeyCtrlW}
@@ -398,7 +190,6 @@ func TestCloseTabNilEntries(t *testing.T) {
 	m := &AppModel{
 		tabs:      []ui.Tab{{Title: "t1"}, {Title: "t2"}},
 		clients:   []*sshclient.Client{nil, nil},
-		terminals: []*ui.TerminalModel{nil, nil},
 		browsers:  []ui.FileBrowserModel{{}, {}},
 		activeTab: 1,
 	}
@@ -426,39 +217,18 @@ func TestAppModelWindowSize(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// AppModel - TerminalOutputMsg
-// ---------------------------------------------------------------------------
-
-func TestAppModelTerminalOutput(t *testing.T) {
-	m := initialModel()
-	m.state = stateMain
-	term := ui.NewTerminalModel(nil)
-	m.terminals = []*ui.TerminalModel{term}
-	m.activeTab = 0
-
-	msg := ui.TerminalOutputMsg{Data: []byte("test output")}
-	result, _ := m.Update(msg)
-	am := result.(AppModel)
-	got := am.terminals[0].BufferedOutput()
-	if got != "test output" {
-		t.Errorf("terminal output = %q, want %q", got, "test output")
-	}
-}
-
-// ---------------------------------------------------------------------------
 // renderMain with terminal
 // ---------------------------------------------------------------------------
 
-func TestRenderMainWithTerminal(t *testing.T) {
+func TestRenderMainWithBrowser(t *testing.T) {
+	dir := t.TempDir()
 	m := initialModel()
 	m.state = stateMain
 	m.width = 80
 	m.height = 40
 	m.tabs = []ui.Tab{{Title: "test", Connected: true}}
-	term := ui.NewTerminalModel(nil)
-	term.AppendOutput([]byte("hello"))
-	m.terminals = []*ui.TerminalModel{term}
-	m.browsers = []ui.FileBrowserModel{{}}
+	browser := ui.NewFileBrowserModel(nil, dir, "/home")
+	m.browsers = []ui.FileBrowserModel{browser}
 	m.activeTab = 0
 
 	view := m.renderMain()
@@ -468,15 +238,15 @@ func TestRenderMainWithTerminal(t *testing.T) {
 }
 
 func TestRenderMainWithError(t *testing.T) {
+	dir := t.TempDir()
 	m := initialModel()
 	m.state = stateMain
 	m.width = 80
 	m.height = 40
 	m.err = "something went wrong"
 	m.tabs = []ui.Tab{{Title: "test", Connected: true}}
-	term := ui.NewTerminalModel(nil)
-	m.terminals = []*ui.TerminalModel{term}
-	m.browsers = []ui.FileBrowserModel{{}}
+	browser := ui.NewFileBrowserModel(nil, dir, "/home")
+	m.browsers = []ui.FileBrowserModel{browser}
 	m.activeTab = 0
 
 	view := m.renderMain()
@@ -578,7 +348,6 @@ func TestAppModelCloseTabMultiple(t *testing.T) {
 	m.state = stateMain
 	m.tabs = []ui.Tab{{Title: "t1"}, {Title: "t2"}}
 	m.clients = []*sshclient.Client{nil, nil}
-	m.terminals = []*ui.TerminalModel{nil, nil}
 	m.browsers = []ui.FileBrowserModel{{}, {}}
 	m.activeTab = 0
 
@@ -594,24 +363,6 @@ func TestAppModelCloseTabMultiple(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// AppModel - terminal focus writes
-// ---------------------------------------------------------------------------
-
-func TestAppModelTerminalFocusWrite(t *testing.T) {
-	m := initialModel()
-	m.state = stateMain
-	m.focus = paneTerminal
-	term := ui.NewTerminalModel(nil)
-	m.terminals = []*ui.TerminalModel{term}
-	m.activeTab = 0
-
-	// Send a char key - should not crash (stdin is nil, Write returns nil)
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}
-	result, _ := m.Update(msg)
-	_ = result.(AppModel)
-}
-
-// ---------------------------------------------------------------------------
 // AppModel - file browser focus forwards keys
 // ---------------------------------------------------------------------------
 
@@ -619,7 +370,6 @@ func TestAppModelFileBrowserFocus(t *testing.T) {
 	dir := t.TempDir()
 	m := initialModel()
 	m.state = stateMain
-	m.focus = paneFileBrowser
 	browser := ui.NewFileBrowserModel(nil, dir, "/home")
 	browser.SetDimensions(80, 30)
 	m.browsers = []ui.FileBrowserModel{browser}
@@ -667,25 +417,6 @@ func TestRenderHostKeyPromptWithPending(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// AppModel - WindowSizeMsg with terminals
-// ---------------------------------------------------------------------------
-
-func TestAppModelWindowSizeWithTerminals(t *testing.T) {
-	m := initialModel()
-	m.state = stateMain
-	term := ui.NewTerminalModel(nil)
-	m.terminals = []*ui.TerminalModel{term}
-	m.browsers = []ui.FileBrowserModel{{}}
-
-	msg := tea.WindowSizeMsg{Width: 120, Height: 50}
-	result, _ := m.Update(msg)
-	am := result.(AppModel)
-	if am.width != 120 || am.height != 50 {
-		t.Errorf("dimensions = %dx%d, want 120x50", am.width, am.height)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // closeTab - activeTab adjusts
 // ---------------------------------------------------------------------------
 
@@ -693,7 +424,6 @@ func TestCloseTabAdjustsActiveTab(t *testing.T) {
 	m := &AppModel{
 		tabs:      []ui.Tab{{Title: "t1"}, {Title: "t2"}, {Title: "t3"}},
 		clients:   []*sshclient.Client{nil, nil, nil},
-		terminals: []*ui.TerminalModel{nil, nil, nil},
 		browsers:  []ui.FileBrowserModel{{}, {}, {}},
 		activeTab: 2,
 	}
@@ -707,7 +437,6 @@ func TestCloseTabMiddle(t *testing.T) {
 	m := &AppModel{
 		tabs:      []ui.Tab{{Title: "t1"}, {Title: "t2"}, {Title: "t3"}},
 		clients:   []*sshclient.Client{nil, nil, nil},
-		terminals: []*ui.TerminalModel{nil, nil, nil},
 		browsers:  []ui.FileBrowserModel{{}, {}, {}},
 		activeTab: 0,
 	}
@@ -718,23 +447,6 @@ func TestCloseTabMiddle(t *testing.T) {
 	if m.tabs[1].Title != "t3" {
 		t.Errorf("remaining tab = %q, want t3", m.tabs[1].Title)
 	}
-}
-
-// ---------------------------------------------------------------------------
-// cleanup with real TerminalModels
-// ---------------------------------------------------------------------------
-
-func TestCleanupWithTerminals(t *testing.T) {
-	m := &AppModel{
-		terminals: []*ui.TerminalModel{
-			ui.NewTerminalModel(nil),
-			nil,
-			ui.NewTerminalModel(nil),
-		},
-		clients: []*sshclient.Client{nil, nil, nil},
-	}
-	// Should not panic
-	m.cleanup()
 }
 
 // ---------------------------------------------------------------------------
@@ -768,68 +480,67 @@ func TestAppModelHostKeyRejectUpperN(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// connectCmd
+// connectWorker / bridge
 // ---------------------------------------------------------------------------
 
-func TestConnectCmdNoAuth(t *testing.T) {
-	conn := config.Connection{Host: "h", Port: "22", Username: "u"}
-	cmd := connectCmd(conn)
-	if cmd == nil {
-		t.Fatal("connectCmd should return a command")
+func TestConnectWorkerUnreachable(t *testing.T) {
+	conn := config.Connection{Host: "192.0.2.1", Port: "22", Username: "u"}
+	bridge := &passwordBridge{
+		msgCh:      make(chan tea.Msg, 1),
+		responseCh: make(chan passwordResponse),
+		approvalCh: make(chan bool),
 	}
-	// Execute the command — it should return a connectedMsg with error
-	msg := cmd()
-	cm, ok := msg.(connectedMsg)
-	if !ok {
-		t.Fatalf("expected connectedMsg, got %T", msg)
-	}
-	if cm.err == nil {
-		t.Error("no auth should produce error")
+	go connectWorker(conn, bridge, nil)
+
+	// The worker should eventually send a connectedMsg (error) or a
+	// PasswordRequestMsg (if auth callback fires before timeout).
+	// With an unreachable host the TCP dial should timeout with an error.
+	msg := <-bridge.msgCh
+	switch m := msg.(type) {
+	case connectedMsg:
+		if m.err == nil {
+			t.Error("unreachable host should produce error")
+		}
+	case ui.PasswordRequestMsg:
+		// Auth callback fired first; cancel it so the worker can finish.
+		bridge.responseCh <- passwordResponse{Cancelled: true}
+		final := <-bridge.msgCh
+		if cm, ok := final.(connectedMsg); ok && cm.err == nil {
+			t.Error("should still fail after cancel")
+		}
+	default:
+		t.Fatalf("unexpected msg type: %T", msg)
 	}
 }
 
-func TestConnectCmdWithPassword(t *testing.T) {
-	conn := config.Connection{Host: "192.0.2.1", Port: "22", Username: "u", Password: "p"}
-	cmd := connectCmd(conn)
-	if cmd == nil {
-		t.Fatal("connectCmd should return a command")
-	}
-	// Execute — will fail to connect but should not panic
-	msg := cmd()
-	cm, ok := msg.(connectedMsg)
-	if !ok {
-		// Could also be a hostKeyMsg
-		_, ok2 := msg.(hostKeyMsg)
-		if !ok2 {
-			t.Fatalf("expected connectedMsg or hostKeyMsg, got %T", msg)
-		}
-	} else {
-		if cm.err == nil {
-			t.Error("connecting to unreachable host should fail")
-		}
-	}
-}
-
-func TestConnectCmdWithBadKeyPath(t *testing.T) {
+func TestConnectWorkerWithBadKeyPath(t *testing.T) {
 	conn := config.Connection{
 		Host:     "192.0.2.1",
 		Port:     "22",
 		Username: "u",
 		KeyPath:  "/nonexistent/key",
-		Password: "p",
 	}
-	cmd := connectCmd(conn)
-	if cmd == nil {
-		t.Fatal("connectCmd should return a command")
+	bridge := &passwordBridge{
+		msgCh:      make(chan tea.Msg, 1),
+		responseCh: make(chan passwordResponse),
+		approvalCh: make(chan bool),
 	}
-	// Execute — bad key path is silently ignored, falls through to password
-	msg := cmd()
-	_, ok := msg.(connectedMsg)
-	if !ok {
-		_, ok2 := msg.(hostKeyMsg)
-		if !ok2 {
-			t.Fatalf("expected connectedMsg or hostKeyMsg, got %T", msg)
+	go connectWorker(conn, bridge, nil)
+
+	msg := <-bridge.msgCh
+	switch m := msg.(type) {
+	case connectedMsg:
+		if m.err == nil {
+			t.Error("unreachable host should produce error")
 		}
+	case ui.PasswordRequestMsg:
+		bridge.responseCh <- passwordResponse{Cancelled: true}
+		final := <-bridge.msgCh
+		if cm, ok := final.(connectedMsg); ok && cm.err == nil {
+			t.Error("should still fail after cancel")
+		}
+	default:
+		t.Fatalf("unexpected msg type: %T", msg)
 	}
 }
 
@@ -841,9 +552,8 @@ func TestAppModelShowHelpBlocksKeys(t *testing.T) {
 	m := initialModel()
 	m.state = stateMain
 	m.showHelp = true
-	m.focus = paneTerminal
 
-	// When help is shown, regular keys should not go to terminal
+	// When help is shown, regular keys should not go to file browser
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}
 	result, _ := m.Update(msg)
 	_ = result.(AppModel)
@@ -902,51 +612,120 @@ func TestAppModelHostKeyAcceptEnter(t *testing.T) {
 	_, priv, _ := ed25519.GenerateKey(rand.Reader)
 	signer, _ := gossh.NewSignerFromKey(priv)
 
+	bridge := &passwordBridge{
+		msgCh:      make(chan tea.Msg, 1),
+		responseCh: make(chan passwordResponse, 1),
+		approvalCh: make(chan bool, 1), // buffered so Update send doesn't block
+	}
+
 	m := initialModel()
 	m.state = stateHostKeyPrompt
+	m.bridge = bridge
 	m.pending = &pendingConnection{
 		hostname: "host:22",
 		hostKey:  signer.PublicKey(),
-		conn:     config.Connection{Host: "host", Port: "22", Username: "user", Password: "pass"},
+		conn:     config.Connection{Host: "host", Port: "22", Username: "user"},
 	}
 
 	enterMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	// Run Update in a goroutine since it will try to send on approvalCh
+	// and we need to be ready to drain the channel in the resulting cmd.
 	result, cmd := m.Update(enterMsg)
 	am := result.(AppModel)
 	if am.pending != nil {
 		t.Error("pending should be nil after accept")
 	}
 	if cmd == nil {
-		t.Error("accept should return a connectWithAcceptedKey command")
+		t.Error("accept should return a waitForBridgeMsg command")
+	}
+	fp := fingerprintSHA256(signer.PublicKey())
+	if acceptedHosts["host:22"] != fp {
+		t.Error("host should be in acceptedHosts after accept")
 	}
 }
 
 // ---------------------------------------------------------------------------
-// connectWithAcceptedKey
+// parseJumpSpec
 // ---------------------------------------------------------------------------
 
-func TestConnectWithAcceptedKeyReturnsCmd(t *testing.T) {
-	_, priv, _ := ed25519.GenerateKey(rand.Reader)
-	signer, _ := gossh.NewSignerFromKey(priv)
+func TestParseJumpSpec(t *testing.T) {
+	tests := []struct {
+		spec string
+		host string
+		port string
+		user string
+	}{
+		{"bastion.example.com", "bastion.example.com", "22", ""},
+		{"bastion.example.com:2222", "bastion.example.com", "2222", ""},
+		{"admin@bastion.example.com", "bastion.example.com", "22", "admin"},
+		{"admin@bastion.example.com:2222", "bastion.example.com", "2222", "admin"},
+	}
+	for _, tt := range tests {
+		c := parseJumpSpec(tt.spec, nil)
+		if c.Host != tt.host {
+			t.Errorf("parseJumpSpec(%q).Host = %q, want %q", tt.spec, c.Host, tt.host)
+		}
+		if c.Port != tt.port {
+			t.Errorf("parseJumpSpec(%q).Port = %q, want %q", tt.spec, c.Port, tt.port)
+		}
+		if c.Username != tt.user {
+			t.Errorf("parseJumpSpec(%q).Username = %q, want %q", tt.spec, c.Username, tt.user)
+		}
+	}
+}
 
-	pending := &pendingConnection{
-		hostname: "192.0.2.1:22",
-		hostKey:  signer.PublicKey(),
-		conn:     config.Connection{Host: "192.0.2.1", Port: "22", Username: "u", Password: "p"},
+func TestParseJumpSpecResolvesSSHConfig(t *testing.T) {
+	hosts := []config.SSHHost{{
+		Alias:    "bastion",
+		HostName: "10.0.0.1",
+		Port:     "2222",
+		User:     "jump",
+	}}
+	c := parseJumpSpec("bastion", hosts)
+	if c.Host != "10.0.0.1" {
+		t.Errorf("expected resolved host 10.0.0.1, got %s", c.Host)
 	}
+	if c.Port != "2222" {
+		t.Errorf("expected port 2222, got %s", c.Port)
+	}
+	if c.Username != "jump" {
+		t.Errorf("expected user jump, got %s", c.Username)
+	}
+}
 
-	cmd := connectWithAcceptedKey(pending)
-	if cmd == nil {
-		t.Fatal("should return a command")
+// ---------------------------------------------------------------------------
+// buildInteractiveAuthMethods
+// ---------------------------------------------------------------------------
+
+func TestBuildInteractiveAuthMethodsIncludesAllTypes(t *testing.T) {
+	conn := config.Connection{Host: "h", Port: "22", Username: "u"}
+	bridge := &passwordBridge{
+		msgCh:      make(chan tea.Msg, 1),
+		responseCh: make(chan passwordResponse),
+		approvalCh: make(chan bool),
 	}
-	// Execute — will fail to connect but tests the code path
-	msg := cmd()
-	cm, ok := msg.(connectedMsg)
-	if !ok {
-		t.Fatalf("expected connectedMsg, got %T", msg)
+	methods := buildInteractiveAuthMethods(conn, bridge, "h")
+	// Should have at least the password-callback and keyboard-interactive methods
+	if len(methods) < 2 {
+		t.Errorf("expected at least 2 auth methods, got %d", len(methods))
 	}
-	if cm.err == nil {
-		t.Error("connecting to unreachable host should fail")
+}
+
+// ---------------------------------------------------------------------------
+// PasswordRequestMsg / PasswordResponseMsg round-trip
+// ---------------------------------------------------------------------------
+
+func TestPasswordDialogRoundTrip(t *testing.T) {
+	m := initialModel()
+	// Simulate receiving a PasswordRequestMsg
+	reqMsg := ui.PasswordRequestMsg{Prompt: "Password:", Hostname: "h", Username: "u"}
+	result, _ := m.Update(reqMsg)
+	am := result.(AppModel)
+	if am.state != statePasswordPrompt {
+		t.Errorf("expected statePasswordPrompt, got %d", am.state)
+	}
+	if !am.passwordDialog.Visible() {
+		t.Error("password dialog should be visible")
 	}
 }
 
@@ -1011,84 +790,631 @@ func TestAppModelConnectionFallthroughNonKeyMsg(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// keyToBytes default case (line 534-536)
+// View — statePasswordPrompt
 // ---------------------------------------------------------------------------
 
-func TestKeyToBytesDefault(t *testing.T) {
-	// Send an F-key that isn't explicitly handled — triggers the default branch
-	got := keyToBytes(tea.KeyMsg{Type: tea.KeyF1})
-	if len(got) == 0 {
-		t.Error("default keyToBytes should return msg.String()")
+func TestAppModelViewPasswordPromptVisible(t *testing.T) {
+	m := initialModel()
+	m.state = statePasswordPrompt
+	m.width = 80
+	m.height = 40
+	m.passwordDialog.Show("Enter password:")
+
+	view := m.View()
+	if view == "" {
+		t.Error("password prompt view should not be empty")
+	}
+	if !strings.Contains(view, "Enter password:") {
+		t.Error("view should contain the password prompt text")
+	}
+}
+
+func TestAppModelViewPasswordPromptHidden(t *testing.T) {
+	m := initialModel()
+	m.state = statePasswordPrompt
+	m.width = 80
+	m.height = 40
+	// Dialog not visible — should fall back to connection view
+	view := m.View()
+	if view == "" {
+		t.Error("view should not be empty even when dialog is hidden")
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Terminal write error path in Update (lines 245-247)
+// Update — statePasswordPrompt key handling
 // ---------------------------------------------------------------------------
 
-type brokenWriter struct{}
-
-func (bw brokenWriter) Write([]byte) (int, error) {
-	return 0, io.ErrClosedPipe
-}
-
-func (bw brokenWriter) Close() error {
-	return io.ErrClosedPipe
-}
-
-func TestAppModelTerminalWriteError(t *testing.T) {
+func TestAppModelPasswordPromptCtrlC(t *testing.T) {
 	m := initialModel()
-	m.state = stateMain
-	m.focus = paneTerminal
+	m.state = statePasswordPrompt
+	m.passwordDialog.Show("Enter password:")
 
-	// Create a terminal with a broken stdin pipe
-	term := ui.NewTerminalModel(nil)
-	term.SetStdinForTest(&brokenWriter{})
-	m.terminals = []*ui.TerminalModel{term}
-	m.activeTab = 0
+	msg := tea.KeyMsg{Type: tea.KeyCtrlC}
+	_, cmd := m.Update(msg)
+	if cmd == nil {
+		t.Error("Ctrl+C in password prompt should return a quit command")
+	}
+}
 
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}
+func TestAppModelPasswordPromptRegularKey(t *testing.T) {
+	m := initialModel()
+	m.state = statePasswordPrompt
+	m.passwordDialog.Show("Enter password:")
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")}
 	result, _ := m.Update(msg)
 	am := result.(AppModel)
-	if !strings.Contains(am.err, "Terminal write failed") {
-		t.Errorf("expected terminal write error, got err=%q", am.err)
+	if am.state != statePasswordPrompt {
+		t.Errorf("regular key should stay in password prompt, got state %d", am.state)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// closeTab with real terminals that have stdin set (lines 363-371)
+// PasswordResponseMsg — handling
 // ---------------------------------------------------------------------------
 
-func TestCloseTabWithStdin(t *testing.T) {
-	_, w := io.Pipe()
-	term := ui.NewTerminalModel(nil)
-	term.SetStdinForTest(w)
-
-	m := &AppModel{
-		tabs:      []ui.Tab{{Title: "t1"}},
-		clients:   []*sshclient.Client{nil},
-		terminals: []*ui.TerminalModel{term},
-		browsers:  []ui.FileBrowserModel{{}},
-		activeTab: 0,
+func TestAppModelPasswordResponseWithBridge(t *testing.T) {
+	bridge := &passwordBridge{
+		msgCh:      make(chan tea.Msg, 1),
+		responseCh: make(chan passwordResponse, 1),
+		approvalCh: make(chan bool, 1),
 	}
-	m.closeTab(0)
-	if len(m.tabs) != 0 {
-		t.Errorf("tabs = %d, want 0", len(m.tabs))
+
+	m := initialModel()
+	m.bridge = bridge
+	m.state = statePasswordPrompt
+	m.passwordDialog.Show("Enter password:")
+
+	msg := ui.PasswordResponseMsg{Password: "secret", Cancelled: false}
+	result, cmd := m.Update(msg)
+	am := result.(AppModel)
+	if am.passwordDialog.Visible() {
+		t.Error("dialog should be hidden after response")
+	}
+	if cmd == nil {
+		t.Error("should return waitForBridgeMsg command")
+	}
+	// Verify the response was sent on the bridge
+	resp := <-bridge.responseCh
+	if resp.Password != "secret" {
+		t.Errorf("password = %q, want %q", resp.Password, "secret")
+	}
+}
+
+func TestAppModelPasswordResponseCancelled(t *testing.T) {
+	bridge := &passwordBridge{
+		msgCh:      make(chan tea.Msg, 1),
+		responseCh: make(chan passwordResponse, 1),
+		approvalCh: make(chan bool, 1),
+	}
+
+	m := initialModel()
+	m.bridge = bridge
+	m.state = statePasswordPrompt
+
+	msg := ui.PasswordResponseMsg{Cancelled: true}
+	result, cmd := m.Update(msg)
+	am := result.(AppModel)
+	if am.state != stateConnection {
+		t.Errorf("cancelled response should return to connection, got %d", am.state)
+	}
+	if cmd == nil {
+		t.Error("should still return waitForBridgeMsg to drain goroutine")
+	}
+	resp := <-bridge.responseCh
+	if !resp.Cancelled {
+		t.Error("cancelled flag should be true")
+	}
+}
+
+func TestAppModelPasswordResponseNoBridge(t *testing.T) {
+	m := initialModel()
+	m.bridge = nil
+	m.state = statePasswordPrompt
+
+	msg := ui.PasswordResponseMsg{Password: "test"}
+	result, cmd := m.Update(msg)
+	am := result.(AppModel)
+	if am.state != stateConnection {
+		t.Errorf("no bridge should go to connection state, got %d", am.state)
+	}
+	if cmd != nil {
+		t.Error("no bridge should return nil cmd")
 	}
 }
 
 // ---------------------------------------------------------------------------
-// cleanup with terminals that have stdin (error path, lines 348-350)
+// CtrlT tab cycling
 // ---------------------------------------------------------------------------
 
-func TestCleanupWithStdinTerminals(t *testing.T) {
-	_, w := io.Pipe()
-	term := ui.NewTerminalModel(nil)
-	term.SetStdinForTest(w)
+func TestAppModelCtrlTCyclesTabs(t *testing.T) {
+	m := initialModel()
+	m.state = stateMain
+	m.tabs = []ui.Tab{{Title: "t1"}, {Title: "t2"}, {Title: "t3"}}
+	m.clients = []*sshclient.Client{nil, nil, nil}
+	m.browsers = []ui.FileBrowserModel{{}, {}, {}}
+	m.activeTab = 0
 
-	m := &AppModel{
-		terminals: []*ui.TerminalModel{term},
-		clients:   []*sshclient.Client{nil},
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}}
+	// We need to send ctrl+t. Let's use the string form.
+	msg = tea.KeyMsg{Type: tea.KeyCtrlT}
+	result, _ := m.Update(msg)
+	am := result.(AppModel)
+	if am.activeTab != 1 {
+		t.Errorf("activeTab = %d, want 1", am.activeTab)
 	}
-	m.cleanup() // Should not panic, should log errors gracefully
+
+	// Cycle again
+	result, _ = am.Update(msg)
+	am = result.(AppModel)
+	if am.activeTab != 2 {
+		t.Errorf("activeTab = %d, want 2", am.activeTab)
+	}
+
+	// Cycle wraps
+	result, _ = am.Update(msg)
+	am = result.(AppModel)
+	if am.activeTab != 0 {
+		t.Errorf("activeTab = %d, want 0 (wrap)", am.activeTab)
+	}
+}
+
+func TestAppModelCtrlTSingleTab(t *testing.T) {
+	m := initialModel()
+	m.state = stateMain
+	m.tabs = []ui.Tab{{Title: "t1"}}
+	m.clients = []*sshclient.Client{nil}
+	m.browsers = []ui.FileBrowserModel{{}}
+	m.activeTab = 0
+
+	msg := tea.KeyMsg{Type: tea.KeyCtrlT}
+	result, _ := m.Update(msg)
+	am := result.(AppModel)
+	// With only 1 tab, Ctrl+T should not change tab
+	if am.activeTab != 0 {
+		t.Errorf("activeTab = %d, want 0 (single tab)", am.activeTab)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Host key reject with bridge
+// ---------------------------------------------------------------------------
+
+func TestAppModelHostKeyRejectWithBridge(t *testing.T) {
+	bridge := &passwordBridge{
+		msgCh:      make(chan tea.Msg, 1),
+		responseCh: make(chan passwordResponse, 1),
+		approvalCh: make(chan bool, 1),
+	}
+
+	m := initialModel()
+	m.state = stateHostKeyPrompt
+	m.pending = &pendingConnection{hostname: "h:22"}
+	m.bridge = bridge
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+	result, cmd := m.Update(msg)
+	am := result.(AppModel)
+	if am.pending != nil {
+		t.Error("pending should be nil after rejection")
+	}
+	if cmd == nil {
+		t.Error("rejection with bridge should return waitForBridgeMsg")
+	}
+	// Drain the approval channel
+	approved := <-bridge.approvalCh
+	if approved {
+		t.Error("approval should be false for rejection")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// makeInteractiveHKCallback
+// ---------------------------------------------------------------------------
+
+func TestMakeInteractiveHKCallbackAlreadyAccepted(t *testing.T) {
+	_, priv, _ := ed25519.GenerateKey(rand.Reader)
+	signer, _ := gossh.NewSignerFromKey(priv)
+	key := signer.PublicKey()
+
+	bridge := &passwordBridge{
+		msgCh:      make(chan tea.Msg, 1),
+		responseCh: make(chan passwordResponse, 1),
+		approvalCh: make(chan bool, 1),
+	}
+	conn := config.Connection{Host: "h", Port: "22"}
+
+	// Pre-accept the host
+	fp := fingerprintSHA256(key)
+	acceptedHosts["h:22"] = fp
+
+	cb := makeInteractiveHKCallback(bridge, conn)
+	err := cb("h:22", nil, key)
+	if err != nil {
+		t.Errorf("already-accepted host should return nil, got %v", err)
+	}
+	// Clean up
+	delete(acceptedHosts, "h:22")
+}
+
+func TestMakeInteractiveHKCallbackStrictNo(t *testing.T) {
+	_, priv, _ := ed25519.GenerateKey(rand.Reader)
+	signer, _ := gossh.NewSignerFromKey(priv)
+	key := signer.PublicKey()
+
+	bridge := &passwordBridge{
+		msgCh:      make(chan tea.Msg, 1),
+		responseCh: make(chan passwordResponse, 1),
+		approvalCh: make(chan bool, 1),
+	}
+	conn := config.Connection{
+		Host:                  "h",
+		Port:                  "22",
+		StrictHostKeyChecking: "no",
+	}
+
+	cb := makeInteractiveHKCallback(bridge, conn)
+	err := cb("new-host:22", nil, key)
+	if err != nil {
+		t.Errorf("StrictHostKeyChecking=no should auto-accept, got %v", err)
+	}
+	// Clean up
+	delete(acceptedHosts, "new-host:22")
+}
+
+func TestMakeInteractiveHKCallbackUserApproves(t *testing.T) {
+	_, priv, _ := ed25519.GenerateKey(rand.Reader)
+	signer, _ := gossh.NewSignerFromKey(priv)
+	key := signer.PublicKey()
+
+	bridge := &passwordBridge{
+		msgCh:      make(chan tea.Msg, 1),
+		responseCh: make(chan passwordResponse, 1),
+		approvalCh: make(chan bool, 1),
+	}
+	conn := config.Connection{Host: "h", Port: "22"}
+
+	cb := makeInteractiveHKCallback(bridge, conn)
+
+	// Run callback in goroutine since it blocks on approvalCh
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- cb("unknown-host:22", nil, key)
+	}()
+
+	// Should receive a hostKeyMsg on bridge
+	msg := <-bridge.msgCh
+	if _, ok := msg.(hostKeyMsg); !ok {
+		t.Fatalf("expected hostKeyMsg, got %T", msg)
+	}
+
+	// Approve
+	bridge.approvalCh <- true
+	err := <-errCh
+	if err != nil {
+		t.Errorf("approved host should return nil, got %v", err)
+	}
+	delete(acceptedHosts, "unknown-host:22")
+}
+
+func TestMakeInteractiveHKCallbackUserRejects(t *testing.T) {
+	_, priv, _ := ed25519.GenerateKey(rand.Reader)
+	signer, _ := gossh.NewSignerFromKey(priv)
+	key := signer.PublicKey()
+
+	bridge := &passwordBridge{
+		msgCh:      make(chan tea.Msg, 1),
+		responseCh: make(chan passwordResponse, 1),
+		approvalCh: make(chan bool, 1),
+	}
+	conn := config.Connection{Host: "h", Port: "22"}
+
+	cb := makeInteractiveHKCallback(bridge, conn)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- cb("reject-host:22", nil, key)
+	}()
+
+	<-bridge.msgCh
+	bridge.approvalCh <- false
+	err := <-errCh
+	if err == nil {
+		t.Error("rejected host should return error")
+	}
+	if !strings.Contains(err.Error(), "rejected") {
+		t.Errorf("error = %q, should mention rejected", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// buildInteractiveAuthMethods — password callback
+// ---------------------------------------------------------------------------
+
+func TestBuildInteractiveAuthMethodsPasswordCallback(t *testing.T) {
+	conn := config.Connection{Host: "h", Port: "22", Username: "u"}
+	bridge := &passwordBridge{
+		msgCh:      make(chan tea.Msg, 2),
+		responseCh: make(chan passwordResponse, 1),
+		approvalCh: make(chan bool, 1),
+	}
+	methods := buildInteractiveAuthMethods(conn, bridge, "h")
+	// The methods include: possibly agent, possibly default keys, password-callback, keyboard-interactive
+	// At minimum 2 (password-callback + keyboard-interactive)
+	if len(methods) < 2 {
+		t.Fatalf("expected at least 2 methods, got %d", len(methods))
+	}
+}
+
+func TestBuildInteractiveAuthMethodsWithKeyPath(t *testing.T) {
+	conn := config.Connection{Host: "h", Port: "22", Username: "u", KeyPath: "/nonexistent/key"}
+	bridge := &passwordBridge{
+		msgCh:      make(chan tea.Msg, 2),
+		responseCh: make(chan passwordResponse, 1),
+		approvalCh: make(chan bool, 1),
+	}
+	methods := buildInteractiveAuthMethods(conn, bridge, "h")
+	// Bad key path is silently ignored; should still have password + keyboard-interactive
+	if len(methods) < 2 {
+		t.Fatalf("expected at least 2 methods, got %d", len(methods))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// makeConnectOptions
+// ---------------------------------------------------------------------------
+
+func TestMakeConnectOptions(t *testing.T) {
+	conn := config.Connection{
+		HostKeyAlgorithms:     "ssh-ed25519",
+		PubkeyAcceptedTypes:   "ssh-ed25519",
+		StrictHostKeyChecking: "no",
+		UserKnownHostsFile:    "/dev/null",
+	}
+	opts := makeConnectOptions(conn)
+	if opts.HostKeyAlgorithms != "ssh-ed25519" {
+		t.Errorf("HostKeyAlgorithms = %q", opts.HostKeyAlgorithms)
+	}
+	if opts.StrictHostKeyChecking != "no" {
+		t.Errorf("StrictHostKeyChecking = %q", opts.StrictHostKeyChecking)
+	}
+	if opts.PubkeyAcceptedTypes != "ssh-ed25519" {
+		t.Errorf("PubkeyAcceptedTypes = %q", opts.PubkeyAcceptedTypes)
+	}
+	if opts.UserKnownHostsFile != "/dev/null" {
+		t.Errorf("UserKnownHostsFile = %q", opts.UserKnownHostsFile)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// waitForBridgeMsg
+// ---------------------------------------------------------------------------
+
+func TestWaitForBridgeMsg(t *testing.T) {
+	bridge := &passwordBridge{
+		msgCh:      make(chan tea.Msg, 1),
+		responseCh: make(chan passwordResponse),
+		approvalCh: make(chan bool),
+	}
+	bridge.msgCh <- connectedMsg{err: fmt.Errorf("test error")}
+
+	cmd := waitForBridgeMsg(bridge)
+	if cmd == nil {
+		t.Fatal("should return non-nil cmd")
+	}
+	msg := cmd()
+	cm, ok := msg.(connectedMsg)
+	if !ok {
+		t.Fatalf("expected connectedMsg, got %T", msg)
+	}
+	if cm.err == nil || cm.err.Error() != "test error" {
+		t.Errorf("error = %v, want 'test error'", cm.err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// logPath
+// ---------------------------------------------------------------------------
+
+func TestLogPath(t *testing.T) {
+	p := logPath()
+	if p == "" {
+		t.Error("logPath should return non-empty")
+	}
+	if !strings.HasSuffix(p, "debug.log") {
+		t.Errorf("logPath = %q, should end with debug.log", p)
+	}
+}
+
+func TestLogPathXDG(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", dir)
+	// Override the executable path check by setting PATH that won't match cwd
+	// logPath checks if exe is in cwd - when running tests from go, it's
+	// typically in a go-build temp dir, which matches the go-build heuristic
+	p := logPath()
+	if p == "" {
+		t.Error("logPath should return non-empty")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// parseJumpSpec — IPv6
+// ---------------------------------------------------------------------------
+
+func TestParseJumpSpecIPv6(t *testing.T) {
+	c := parseJumpSpec("[::1]:2222", nil)
+	if c.Host != "::1" {
+		t.Errorf("Host = %q, want %q", c.Host, "::1")
+	}
+	if c.Port != "2222" {
+		t.Errorf("Port = %q, want %q", c.Port, "2222")
+	}
+}
+
+func TestParseJumpSpecIPv6NoPort(t *testing.T) {
+	c := parseJumpSpec("[::1]", nil)
+	if c.Host != "::1" {
+		t.Errorf("Host = %q, want %q", c.Host, "::1")
+	}
+	if c.Port != "22" {
+		t.Errorf("Port = %q, want %q", c.Port, "22")
+	}
+}
+
+func TestParseJumpSpecUserIPv6(t *testing.T) {
+	c := parseJumpSpec("admin@[::1]:3333", nil)
+	if c.Username != "admin" {
+		t.Errorf("Username = %q, want %q", c.Username, "admin")
+	}
+	if c.Host != "::1" {
+		t.Errorf("Host = %q, want %q", c.Host, "::1")
+	}
+	if c.Port != "3333" {
+		t.Errorf("Port = %q, want %q", c.Port, "3333")
+	}
+}
+
+func TestParseJumpSpecWhitespace(t *testing.T) {
+	c := parseJumpSpec("  bastion.example.com  ", nil)
+	if c.Host != "bastion.example.com" {
+		t.Errorf("Host = %q, want trimmed", c.Host)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ConnectMsg with SSH config merging
+// ---------------------------------------------------------------------------
+
+func TestAppModelConnectMsgMergesSSHConfig(t *testing.T) {
+	m := initialModel()
+	m.sshHosts = []config.SSHHost{{
+		Alias:                 "myhost",
+		HostName:              "myhost.example.com",
+		HostKeyAlgorithms:     "ssh-ed25519",
+		PubkeyAcceptedTypes:   "ssh-ed25519",
+		StrictHostKeyChecking: "no",
+		UserKnownHostsFile:    "/dev/null",
+		IdentityFile:          "/key",
+		ProxyJump:             "bastion",
+	}}
+
+	conn := config.Connection{Host: "myhost.example.com", Port: "22", Username: "u"}
+	msg := ui.ConnectMsg{Conn: conn}
+	_, cmd := m.Update(msg)
+	if cmd == nil {
+		t.Error("ConnectMsg should return a command")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// connectedMsg success
+// ---------------------------------------------------------------------------
+
+func TestAppModelConnectedMsgSuccess(t *testing.T) {
+	m := initialModel()
+	m.state = stateConnection
+
+	// We can't easily create a real client, but we can test the error path
+	msg := connectedMsg{
+		err:  nil,
+		conn: config.Connection{Host: "h", Port: "22", Username: "u"},
+		// client is nil — will panic when trying to get home dir
+		// So test error path instead
+	}
+	// Test error path is more practical
+	msg.err = fmt.Errorf("dial timeout")
+	result, _ := m.Update(msg)
+	am := result.(AppModel)
+	if am.state != stateConnection {
+		t.Errorf("failed connectedMsg should stay at connection, got %d", am.state)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// statePasswordPrompt constant
+// ---------------------------------------------------------------------------
+
+func TestStatePasswordPromptConstant(t *testing.T) {
+	if statePasswordPrompt != 3 {
+		t.Errorf("statePasswordPrompt = %d, want 3", statePasswordPrompt)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// cleanup with mixed nil/non-nil (error path)
+// ---------------------------------------------------------------------------
+
+func TestCleanupMixedClients(t *testing.T) {
+	m := &AppModel{
+		clients: []*sshclient.Client{nil, nil, nil},
+	}
+	// Should not panic
+	m.cleanup()
+}
+
+// ---------------------------------------------------------------------------
+// Update forwards unhandled msgs to browser in main state
+// ---------------------------------------------------------------------------
+
+func TestAppModelForwardsToBrowserInMain(t *testing.T) {
+	dir := t.TempDir()
+	m := initialModel()
+	m.state = stateMain
+	m.width = 80
+	m.height = 40
+	m.tabs = []ui.Tab{{Title: "test"}}
+	browser := ui.NewFileBrowserModel(nil, dir, "/home")
+	m.browsers = []ui.FileBrowserModel{browser}
+	m.activeTab = 0
+
+	// Send a custom message type
+	result, _ := m.Update(dummyMsg{})
+	_ = result.(AppModel)
+	// Should not crash — browser handles unknown msg gracefully
+}
+
+// ---------------------------------------------------------------------------
+// View stateMain with width set
+// ---------------------------------------------------------------------------
+
+func TestAppModelViewMainWithWidth(t *testing.T) {
+	dir := t.TempDir()
+	m := initialModel()
+	m.state = stateMain
+	m.width = 100
+	m.height = 40
+	m.tabs = []ui.Tab{{Title: "test", Connected: true}}
+	browser := ui.NewFileBrowserModel(nil, dir, "/home")
+	m.browsers = []ui.FileBrowserModel{browser}
+	m.activeTab = 0
+
+	view := m.View()
+	if view == "" {
+		t.Error("main view with width should not be empty")
+	}
+	if !strings.Contains(view, "test") {
+		t.Error("main view should contain tab title")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AppModel - WindowSizeMsg updates browsers
+// ---------------------------------------------------------------------------
+
+func TestAppModelWindowSizeUpdatesBrowsers(t *testing.T) {
+	dir := t.TempDir()
+	m := initialModel()
+	m.state = stateMain
+	browser := ui.NewFileBrowserModel(nil, dir, "/home")
+	m.browsers = []ui.FileBrowserModel{browser}
+	m.tabs = []ui.Tab{{Title: "test"}}
+
+	msg := tea.WindowSizeMsg{Width: 200, Height: 80}
+	result, _ := m.Update(msg)
+	am := result.(AppModel)
+	if am.width != 200 || am.height != 80 {
+		t.Errorf("dims = %dx%d, want 200x80", am.width, am.height)
+	}
 }

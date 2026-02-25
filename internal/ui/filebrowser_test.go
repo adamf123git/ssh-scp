@@ -719,8 +719,8 @@ func TestFBViewWithFiles(t *testing.T) {
 	m.remoteFiles = []sshclient.RemoteFile{{Name: "remote.txt", Size: 512}}
 
 	view := m.View()
-	if !strings.Contains(view, "Tab") {
-		t.Error("view should contain status bar with Tab hint")
+	if !strings.Contains(view, "Ctrl") {
+		t.Error("view should contain status bar with Ctrl hint")
 	}
 }
 

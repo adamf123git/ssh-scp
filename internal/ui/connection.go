@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"ssh-scp/internal/config"
@@ -23,8 +24,8 @@ const (
 	fieldHost connectionField = iota
 	fieldPort
 	fieldUser
-	fieldPass
 	fieldKey
+	fieldJump
 	fieldCount
 )
 
@@ -83,21 +84,23 @@ func NewConnectionModel(cfg *config.Config) ConnectionModel {
 	return NewConnectionModelWithSSH(cfg, config.LoadSSHConfig())
 }
 
+// SetError sets an error message to display on the connection screen.
+func (m *ConnectionModel) SetError(msg string) {
+	m.err = msg
+}
+
 // NewConnectionModelWithSSH creates a connection screen with explicit SSH config hosts.
 func NewConnectionModelWithSSH(cfg *config.Config, sshHosts []config.SSHHost) ConnectionModel {
 	inputs := make([]textinput.Model, fieldCount)
-	labels := []string{"Host", "Port", "Username", "Password", "SSH Key Path"}
+	labels := []string{"Host", "Port", "Username", "SSH Key Path", "Jump Host"}
 	for i := range inputs {
 		t := textinput.New()
 		t.Placeholder = labels[i]
 		t.CharLimit = 256
-		if i == int(fieldPass) {
-			t.EchoMode = textinput.EchoPassword
-			t.EchoCharacter = '•'
-		}
 		inputs[i] = t
 	}
 	inputs[fieldPort].SetValue("22")
+	inputs[fieldJump].Placeholder = "user@host:port (optional)"
 	inputs[fieldHost].Focus()
 
 	// Build combined list: SSH config hosts first, then recent connections.
@@ -109,7 +112,15 @@ func NewConnectionModelWithSSH(cfg *config.Config, sshHosts []config.SSHHost) Co
 		items = append(items, connItem{conn: c, source: "recent"})
 	}
 
-	l := list.New(items, list.NewDefaultDelegate(), 44, 14)
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.
+		Foreground(lipgloss.Color("#FFFFFF")).
+		BorderForeground(lipgloss.Color("#7D56F4"))
+	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
+		Foreground(lipgloss.Color("#AAAAAA")).
+		BorderForeground(lipgloss.Color("#7D56F4"))
+
+	l := list.New(items, delegate, 44, 14)
 	l.Title = "Connections"
 	l.SetShowStatusBar(false)
 
@@ -141,22 +152,32 @@ func (m ConnectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.connList.SetHeight(listH)
 		return m, nil
 	case tea.KeyMsg:
+		log.Printf("[ConnectionModel] key: type=%d string=%q runes=%v alt=%v pane=%d focused=%d",
+			msg.Type, msg.String(), msg.Runes, msg.Alt, m.activePane, m.focused)
+
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
 
 		case tea.KeyEnter:
+			log.Printf("[ConnectionModel] Enter pressed, pane=%d host=%q user=%q",
+				m.activePane, m.inputs[fieldHost].Value(), m.inputs[fieldUser].Value())
 			if m.activePane == paneList {
 				// Populate form from selected list item and connect.
 				if item, ok := m.connList.SelectedItem().(connItem); ok {
+					log.Printf("[ConnectionModel] list item selected: %s@%s", item.conn.Username, item.conn.Host)
 					m.fillForm(item.conn)
 					m.activePane = paneForm
 					m.inputs[m.focused].Focus()
-					return m, m.submitForm()
+					cmd := m.submitForm()
+					log.Printf("[ConnectionModel] submitForm returned cmd=%v err=%q", cmd != nil, m.err)
+					return m, cmd
 				}
 				return m, nil
 			}
-			return m, m.submitForm()
+			cmd := m.submitForm()
+			log.Printf("[ConnectionModel] submitForm returned cmd=%v err=%q", cmd != nil, m.err)
+			return m, cmd
 
 		case tea.KeyTab, tea.KeyDown:
 			if m.activePane == paneForm {
@@ -205,8 +226,8 @@ func (m *ConnectionModel) fillForm(c config.Connection) {
 	m.inputs[fieldHost].SetValue(c.Host)
 	m.inputs[fieldPort].SetValue(c.Port)
 	m.inputs[fieldUser].SetValue(c.Username)
-	m.inputs[fieldPass].SetValue(c.Password)
 	m.inputs[fieldKey].SetValue(c.KeyPath)
+	m.inputs[fieldJump].SetValue(c.ProxyJump)
 }
 
 // submitForm validates and submits the form.
@@ -214,8 +235,8 @@ func (m *ConnectionModel) submitForm() tea.Cmd {
 	host := m.inputs[fieldHost].Value()
 	port := m.inputs[fieldPort].Value()
 	user := m.inputs[fieldUser].Value()
-	pass := m.inputs[fieldPass].Value()
 	key := m.inputs[fieldKey].Value()
+	jump := m.inputs[fieldJump].Value()
 
 	if host == "" || user == "" {
 		m.err = "Host and username are required"
@@ -226,12 +247,12 @@ func (m *ConnectionModel) submitForm() tea.Cmd {
 	}
 
 	conn := config.Connection{
-		Name:     fmt.Sprintf("%s@%s", user, host),
-		Host:     host,
-		Port:     port,
-		Username: user,
-		Password: pass,
-		KeyPath:  key,
+		Name:      fmt.Sprintf("%s@%s", user, host),
+		Host:      host,
+		Port:      port,
+		Username:  user,
+		KeyPath:   key,
+		ProxyJump: jump,
 	}
 	m.cfg.AddRecent(conn)
 	if err := config.Save(m.cfg); err != nil {
@@ -269,7 +290,7 @@ var (
 )
 
 func (m ConnectionModel) View() string {
-	labels := []string{"Host:", "Port:", "Username:", "Password:", "SSH Key:"}
+	labels := []string{"Host:", "Port:", "Username:", "SSH Key:", "Jump Host:"}
 	var rows []string
 	for i, inp := range m.inputs {
 		label := labelStyle.Render(labels[i])
@@ -300,7 +321,14 @@ func (m ConnectionModel) View() string {
 
 	if m.hasItems {
 		listView := m.connList.View()
-		content = lipgloss.JoinHorizontal(lipgloss.Top, content, "  ", listView)
+		var listBoxStyle lipgloss.Style
+		if m.activePane == paneList {
+			listBoxStyle = focusedInputBoxStyle
+		} else {
+			listBoxStyle = dimBoxStyle
+		}
+		listBox := listBoxStyle.Render(listView)
+		content = lipgloss.JoinHorizontal(lipgloss.Top, content, "  ", listBox)
 	}
 
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)

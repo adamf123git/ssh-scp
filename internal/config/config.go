@@ -8,12 +8,17 @@ import (
 
 // Connection represents a saved SSH connection.
 type Connection struct {
-	Name     string `json:"name"`
-	Host     string `json:"host"`
-	Port     string `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password,omitempty"`
-	KeyPath  string `json:"key_path,omitempty"`
+	Name                  string `json:"name"`
+	Host                  string `json:"host"`
+	Port                  string `json:"port"`
+	Username              string `json:"username"`
+	Password              string `json:"password,omitempty"`
+	KeyPath               string `json:"key_path,omitempty"`
+	HostKeyAlgorithms     string `json:"host_key_algorithms,omitempty"`
+	PubkeyAcceptedTypes   string `json:"pubkey_accepted_types,omitempty"`
+	StrictHostKeyChecking string `json:"strict_host_key_checking,omitempty"`
+	UserKnownHostsFile    string `json:"user_known_hosts_file,omitempty"`
+	ProxyJump             string `json:"proxy_jump,omitempty"`
 }
 
 // Config holds application configuration.

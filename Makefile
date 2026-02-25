@@ -25,7 +25,7 @@ fmt:
 
 ## test: run all tests
 test:
-	go test ./...
+	go test -race ./...
 
 ## coverage: run tests with coverage report
 coverage:

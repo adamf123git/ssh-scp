@@ -27,7 +27,7 @@ The app follows Bubble Tea's **Model → Update → View** loop. The root model 
 
 ### Focus & input routing
 
-`AppModel.focus` (`paneTerminal` | `paneFileBrowser`) controls where keystrokes go. When terminal is focused, keys are converted to ANSI bytes via `keyToBytes()` and written directly to the SSH stdin pipe. Ctrl+T toggles focus.
+`AppModel` routes keystrokes in `stateMain` to `FileBrowserModel.Update()`. `Tab` and `Ctrl+←/→` switch between local and remote panels within the file browser. `Ctrl+T` cycles through open connection tabs.
 
 ## Build & Run
 

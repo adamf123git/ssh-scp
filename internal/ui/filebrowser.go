@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -128,19 +129,23 @@ func (m FileBrowserModel) Update(msg tea.Msg) (FileBrowserModel, tea.Cmd) {
 
 	case remoteFilesMsg:
 		if msg.err == nil {
+			log.Printf("[FileBrowser] remote listing: %d files in %s", len(msg.files), m.remoteDir)
 			m.remoteFiles = msg.files
 			if m.remoteCursor >= len(m.remoteFiles) {
 				m.remoteCursor = 0
 			}
 		} else {
+			log.Printf("[FileBrowser] remote listing error: %v", msg.err)
 			m.statusMsg = "Error: " + msg.err.Error()
 		}
 
 	case TransferDoneMsg:
 		m.transferring = false
 		if msg.Err != nil {
+			log.Printf("[FileBrowser] transfer failed (%s): %v", m.transferProgress, msg.Err)
 			m.statusMsg = fmt.Sprintf("Transfer failed (%s): %s", m.transferProgress, msg.Err.Error())
 		} else {
+			log.Printf("[FileBrowser] transfer complete: %s", m.transferProgress)
 			m.statusMsg = fmt.Sprintf("Transfer complete: %s", m.transferProgress)
 			m.refreshLocal()
 			return m, refreshRemoteCmd(m.client, m.remoteDir)
@@ -148,7 +153,7 @@ func (m FileBrowserModel) Update(msg tea.Msg) (FileBrowserModel, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "tab":
+		case "tab", "ctrl+right", "ctrl+left":
 			if m.focus == panelLocal {
 				m.focus = panelRemote
 			} else {
@@ -361,22 +366,24 @@ func (m FileBrowserModel) renderLocalPanel(panelWidth, panelHeight int) string {
 		visibleHeight = 1
 	}
 
+	// Dynamic name width: content width minus size(7) + gap(2) + date(10) = 19 chars overhead
+	contentWidth := panelWidth - 4
+	nameWidth := contentWidth - 19
+	if nameWidth < 12 {
+		nameWidth = 12
+	}
+
 	for i := m.localScroll; i < len(m.localFiles) && i < m.localScroll+visibleHeight; i++ {
 		f := m.localFiles[i]
 		name := f.Name()
 		size := formatSize(f.Size())
 		modTime := f.ModTime().Format("2006-01-02")
-		perm := f.Mode().String()
-		permShort := perm
-		if len(permShort) > 3 {
-			permShort = permShort[:3]
-		}
 
 		var line string
 		if f.IsDir() {
-			line = dirStyle.Render("▸ " + truncate(name, 20) + "/")
+			line = dirStyle.Render("▸ " + truncate(name, nameWidth-3) + "/")
 		} else {
-			line = fileStyle.Render(fmt.Sprintf("%-3s %-20s %6s  %s", permShort, truncate(name, 20), size, modTime))
+			line = fileStyle.Render(fmt.Sprintf("%-*s %6s  %s", nameWidth, truncate(name, nameWidth), size, modTime))
 		}
 
 		if i == m.localCursor {
@@ -407,20 +414,23 @@ func (m FileBrowserModel) renderRemotePanel(panelWidth, panelHeight int) string 
 		visibleHeight = 1
 	}
 
+	// Dynamic name width: content width minus size(7) + gap(2) + date(10) = 19 chars overhead
+	contentWidth := panelWidth - 4
+	nameWidth := contentWidth - 19
+	if nameWidth < 12 {
+		nameWidth = 12
+	}
+
 	for i := m.remoteScroll; i < len(m.remoteFiles) && i < m.remoteScroll+visibleHeight; i++ {
 		f := m.remoteFiles[i]
 		size := formatSize(f.Size)
 		modTime := f.ModTime.Format("2006-01-02")
-		perm := f.Mode.String()
-		if len(perm) > 3 {
-			perm = perm[:3]
-		}
 
 		var line string
 		if f.IsDir {
-			line = dirStyle.Render("▸ " + truncate(f.Name, 20) + "/")
+			line = dirStyle.Render("▸ " + truncate(f.Name, nameWidth-3) + "/")
 		} else {
-			line = fileStyle.Render(fmt.Sprintf("%-3s %-20s %6s  %s", perm, truncate(f.Name, 20), size, modTime))
+			line = fileStyle.Render(fmt.Sprintf("%-*s %6s  %s", nameWidth, truncate(f.Name, nameWidth), size, modTime))
 		}
 
 		if i == m.remoteCursor {
@@ -450,7 +460,7 @@ func (m FileBrowserModel) View() string {
 	panels := lipgloss.JoinHorizontal(lipgloss.Top, local, remote)
 
 	statusLine := statusBarStyle.Render(
-		fmt.Sprintf(" Tab: switch panels • Ctrl+U: upload • Ctrl+D: download • Enter: enter dir • Backspace: up | %s", m.statusMsg),
+		fmt.Sprintf(" Ctrl + ←/→: switch panels • Ctrl + U: upload • Ctrl + D: download • Enter: enter dir • Backspace: up | %s", m.statusMsg),
 	)
 
 	return lipgloss.JoinVertical(lipgloss.Left, panels, statusLine)

@@ -41,7 +41,7 @@ go run ./cmd/main.go
 
 | Key         | Action                                                            |
 | ----------- | ----------------------------------------------------------------- |
-| `Ctrl+T`    | Toggle focus between terminal and file browser                    |
+| `Ctrl+T`    | Switch to the next connection tab                                 |
 | `Ctrl+U`    | Upload selected local file to remote directory                    |
 | `Ctrl+D`    | Download selected remote file to local directory                  |
 | `Ctrl+N`    | Open a new connection tab                                         |

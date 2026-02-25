@@ -7,15 +7,16 @@ import (
 var helpContent = `
   Key Bindings
 
-  Ctrl+T    Toggle focus: terminal ↔ file browser
+  Ctrl+←/→  Switch between local and remote panels
+  Tab       Switch between local and remote panels
   Ctrl+U    Upload selected local file to remote
   Ctrl+D    Download selected remote file to local
+  Ctrl+T    Switch to next tab
   Ctrl+N    New connection tab
   Ctrl+W    Close current tab
-  Tab       Switch between local and remote panels
-  Enter     Navigate into directory / open file
+  Enter     Navigate into directory
   Backspace Go up one directory
-  T         Transfer selected file
+  T         Transfer selected file (contextual)
   ?         Toggle this help overlay
   Ctrl+C    Quit
 `

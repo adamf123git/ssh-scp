@@ -146,8 +146,8 @@ func TestConnectionModelShiftTabNavigation(t *testing.T) {
 	model, _ := m.Update(msg)
 	m = model.(ConnectionModel)
 	// Should wrap to last field
-	if m.focused != fieldKey {
-		t.Errorf("after shift+tab: focused = %d, want fieldKey(%d)", m.focused, fieldKey)
+	if m.focused != fieldJump {
+		t.Errorf("after shift+tab: focused = %d, want fieldJump(%d)", m.focused, fieldJump)
 	}
 }
 
@@ -231,7 +231,6 @@ func TestConnectionModelEnterValid(t *testing.T) {
 	m := NewConnectionModelWithSSH(cfg, nil)
 	m.inputs[fieldHost].SetValue("example.com")
 	m.inputs[fieldUser].SetValue("admin")
-	m.inputs[fieldPass].SetValue("secret")
 
 	enterMsg := tea.KeyMsg{Type: tea.KeyEnter}
 	_, cmd := m.Update(enterMsg)
@@ -278,8 +277,8 @@ func TestConnectionModelUpNavigation(t *testing.T) {
 	upMsg := tea.KeyMsg{Type: tea.KeyUp}
 	model, _ := m.Update(upMsg)
 	m = model.(ConnectionModel)
-	if m.focused != fieldKey {
-		t.Errorf("after up from host: focused = %d, want fieldKey(%d)", m.focused, fieldKey)
+	if m.focused != fieldJump {
+		t.Errorf("after up from host: focused = %d, want fieldJump(%d)", m.focused, fieldJump)
 	}
 }
 
@@ -456,11 +455,11 @@ func TestConnectionModelFillForm(t *testing.T) {
 	cfg := &config.Config{}
 	m := NewConnectionModelWithSSH(cfg, nil)
 	conn := config.Connection{
-		Host:     "filled.example.com",
-		Port:     "2222",
-		Username: "filleduser",
-		Password: "filledpass",
-		KeyPath:  "/tmp/key",
+		Host:      "filled.example.com",
+		Port:      "2222",
+		Username:  "filleduser",
+		KeyPath:   "/tmp/key",
+		ProxyJump: "bastion:2222",
 	}
 	m.fillForm(conn)
 	if m.inputs[fieldHost].Value() != "filled.example.com" {
@@ -474,5 +473,98 @@ func TestConnectionModelFillForm(t *testing.T) {
 	}
 	if m.inputs[fieldKey].Value() != "/tmp/key" {
 		t.Errorf("key = %q", m.inputs[fieldKey].Value())
+	}
+	if m.inputs[fieldJump].Value() != "bastion:2222" {
+		t.Errorf("jump = %q", m.inputs[fieldJump].Value())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ConnectionModel - SetError
+// ---------------------------------------------------------------------------
+
+func TestConnectionModelSetError(t *testing.T) {
+	cfg := &config.Config{}
+	m := NewConnectionModelWithSSH(cfg, nil)
+	m.SetError("bad host")
+	if m.err != "bad host" {
+		t.Errorf("err = %q, want %q", m.err, "bad host")
+	}
+	// Clear error
+	m.SetError("")
+	if m.err != "" {
+		t.Errorf("err should be empty after clear, got %q", m.err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ConnectionModel - list pane Enter with invalid selection
+// ---------------------------------------------------------------------------
+
+func TestConnectionModelListPaneEnterNoSelection(t *testing.T) {
+	cfg := &config.Config{}
+	m := NewConnectionModelWithSSH(cfg, nil)
+	m.activePane = paneList
+
+	enterMsg := tea.KeyMsg{Type: tea.KeyEnter}
+	model, cmd := m.Update(enterMsg)
+	_ = model.(ConnectionModel)
+	if cmd != nil {
+		t.Error("Enter in list pane with no items should return nil cmd")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ConnectionModel - list pane key forwarding
+// ---------------------------------------------------------------------------
+
+func TestConnectionModelListPaneKeyForwarding(t *testing.T) {
+	cfg := &config.Config{
+		RecentConnections: []config.Connection{
+			{Name: "srv", Host: "h1", Port: "22", Username: "u1"},
+		},
+	}
+	m := NewConnectionModelWithSSH(cfg, nil)
+	// Switch to list pane
+	ctrlRight := tea.KeyMsg{Type: tea.KeyCtrlRight}
+	model, _ := m.Update(ctrlRight)
+	m = model.(ConnectionModel)
+
+	// Send a regular char, should forward to list
+	charMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}
+	model, _ = m.Update(charMsg)
+	_ = model.(ConnectionModel)
+	// Should not crash
+}
+
+// ---------------------------------------------------------------------------
+// ConnectionModel - View with dimmed form (list focused)
+// ---------------------------------------------------------------------------
+
+func TestConnectionModelViewListFocused(t *testing.T) {
+	cfg := &config.Config{
+		RecentConnections: []config.Connection{
+			{Name: "srv", Host: "h1", Port: "22", Username: "u1"},
+		},
+	}
+	m := NewConnectionModelWithSSH(cfg, nil)
+	m.width = 120
+	m.height = 40
+	m.activePane = paneList
+	view := m.View()
+	if view == "" {
+		t.Error("view should not be empty when list is focused")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// connItem Description fallback to host
+// ---------------------------------------------------------------------------
+
+func TestConnItemDescriptionNoName(t *testing.T) {
+	r := connItem{conn: config.Connection{Host: "myhost.com"}, source: "recent"}
+	want := "[recent] myhost.com"
+	if r.Description() != want {
+		t.Errorf("Description = %q, want %q", r.Description(), want)
 	}
 }

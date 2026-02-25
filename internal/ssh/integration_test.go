@@ -141,7 +141,7 @@ func TestNewClient(t *testing.T) {
 	host, port, _ := net.SplitHostPort(addr)
 	client, err := New(host, port, "testuser",
 		[]ssh.AuthMethod{PasswordAuth("testpass")},
-		ssh.InsecureIgnoreHostKey())
+		ssh.InsecureIgnoreHostKey(), nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -159,7 +159,7 @@ func TestNewClientBadAuth(t *testing.T) {
 	host, port, _ := net.SplitHostPort(addr)
 	_, err := New(host, port, "testuser",
 		[]ssh.AuthMethod{PasswordAuth("wrong")},
-		ssh.InsecureIgnoreHostKey())
+		ssh.InsecureIgnoreHostKey(), nil)
 	if err == nil {
 		t.Error("expected auth failure")
 	}
@@ -172,7 +172,7 @@ func TestClientClose(t *testing.T) {
 	host, port, _ := net.SplitHostPort(addr)
 	client, err := New(host, port, "testuser",
 		[]ssh.AuthMethod{PasswordAuth("testpass")},
-		ssh.InsecureIgnoreHostKey())
+		ssh.InsecureIgnoreHostKey(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestClientNewSession(t *testing.T) {
 	host, port, _ := net.SplitHostPort(addr)
 	client, err := New(host, port, "testuser",
 		[]ssh.AuthMethod{PasswordAuth("testpass")},
-		ssh.InsecureIgnoreHostKey())
+		ssh.InsecureIgnoreHostKey(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestClientListDir(t *testing.T) {
 	host, port, _ := net.SplitHostPort(addr)
 	client, err := New(host, port, "testuser",
 		[]ssh.AuthMethod{PasswordAuth("testpass")},
-		ssh.InsecureIgnoreHostKey())
+		ssh.InsecureIgnoreHostKey(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ func TestClientStartTerminal(t *testing.T) {
 	host, port, _ := net.SplitHostPort(addr)
 	client, err := New(host, port, "testuser",
 		[]ssh.AuthMethod{PasswordAuth("testpass")},
-		ssh.InsecureIgnoreHostKey())
+		ssh.InsecureIgnoreHostKey(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +272,7 @@ func TestClientResizePty(t *testing.T) {
 	host, port, _ := net.SplitHostPort(addr)
 	client, err := New(host, port, "testuser",
 		[]ssh.AuthMethod{PasswordAuth("testpass")},
-		ssh.InsecureIgnoreHostKey())
+		ssh.InsecureIgnoreHostKey(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func TestClientUploadDownloadFile(t *testing.T) {
 	host, port, _ := net.SplitHostPort(addr)
 	client, err := New(host, port, "testuser",
 		[]ssh.AuthMethod{PasswordAuth("testpass")},
-		ssh.InsecureIgnoreHostKey())
+		ssh.InsecureIgnoreHostKey(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +339,7 @@ func TestUploadFileNonexistentLocal(t *testing.T) {
 	host, port, _ := net.SplitHostPort(addr)
 	client, err := New(host, port, "testuser",
 		[]ssh.AuthMethod{PasswordAuth("testpass")},
-		ssh.InsecureIgnoreHostKey())
+		ssh.InsecureIgnoreHostKey(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
