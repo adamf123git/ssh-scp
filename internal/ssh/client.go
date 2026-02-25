@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/bramvdbogaerde/go-scp"
@@ -111,7 +112,9 @@ func (c *Client) ListDir(path string) ([]RemoteFile, error) {
 	}
 	defer session.Close()
 
-	cmd := fmt.Sprintf("ls -la --time-style='+%%Y-%%m-%%d %%H:%%M:%%S' %s 2>/dev/null || ls -la %s", path, path)
+	// Use printf %q to safely single-quote the path, preventing shell injection.
+	escapedPath := shellQuote(path)
+	cmd := fmt.Sprintf("ls -la --time-style='+%%Y-%%m-%%d %%H:%%M:%%S' %s 2>/dev/null || ls -la %s", escapedPath, escapedPath)
 	out, err := session.Output(cmd)
 	if err != nil {
 		return nil, err
@@ -179,6 +182,12 @@ func parseLS(output string) []RemoteFile {
 		files = append(files, *f)
 	}
 	return files
+}
+
+// shellQuote wraps a path in single quotes and escapes any single quotes within it,
+// preventing shell injection when the path is used in a remote command.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 func splitLines(s string) []string {

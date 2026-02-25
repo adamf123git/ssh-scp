@@ -464,7 +464,7 @@ func connectWithAcceptedKey(pending *pendingConnection) tea.Cmd {
 // fingerprintMD5 computes the MD5 fingerprint of a host key for display purposes,
 // matching the historical OpenSSH format. MD5 is not used here for security.
 func fingerprintMD5(key ssh.PublicKey) string {
-	h := md5.Sum(key.Marshal())
+	h := md5.Sum(key.Marshal()) //nolint:gosec // MD5 used only for display, matching OpenSSH fingerprint format
 	var parts [16]string
 	for i, b := range h {
 		parts[i] = fmt.Sprintf("%02x", b)
