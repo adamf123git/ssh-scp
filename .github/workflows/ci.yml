@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    container:
+      image: golang:1.24-alpine
+
+    steps:
+      - name: Install dependencies
+        run: apk add --no-cache git make bc gcc musl-dev curl
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin
+          golangci-lint version
+
+      - name: Lint
+        run: golangci-lint run --timeout=5m ./...
+
+      - name: Format check
+        run: |
+          make fmt
+          git diff --exit-code || (echo "FAIL: go fmt produced changes — please run 'make fmt' and commit"; exit 1)
+
+      - name: Build
+        run: make build
+
+      - name: Test with coverage (min 80%)
+        run: make check-coverage

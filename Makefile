@@ -2,7 +2,9 @@ APP_NAME := ssh-scp
 MAIN     := ./cmd/main.go
 PREFIX   ?= /usr/local
 
-.PHONY: build install lint fmt test coverage clean
+MIN_COVERAGE ?= 80
+
+.PHONY: build install lint fmt test coverage check-coverage clean
 
 ## build: compile the binary
 build:
@@ -31,6 +33,18 @@ coverage:
 	go tool cover -func=coverage.out
 	@echo ""
 	@echo "To view HTML report: go tool cover -html=coverage.out"
+
+## check-coverage: fail if total coverage is below MIN_COVERAGE (default 80%)
+check-coverage:
+	@go test -coverprofile=coverage.out ./...
+	@total=$$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $$NF}' | tr -d '%'); \
+	echo "Total coverage: $${total}%"; \
+	if [ $$(echo "$${total} < $(MIN_COVERAGE)" | bc -l) -eq 1 ]; then \
+		echo "FAIL: coverage $${total}% is below minimum $(MIN_COVERAGE)%"; \
+		exit 1; \
+	else \
+		echo "OK: coverage $${total}% meets minimum $(MIN_COVERAGE)%"; \
+	fi
 
 ## clean: remove build artifacts
 clean:
