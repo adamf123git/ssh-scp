@@ -141,39 +141,11 @@ func (m ConnectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.connList.SetHeight(listH)
 		return m, nil
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "esc":
+		switch msg.Type {
+		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
 
-		case "ctrl+l":
-			// Toggle between form and connection list.
-			if m.hasItems {
-				if m.activePane == paneForm {
-					m.inputs[m.focused].Blur()
-					m.activePane = paneList
-				} else {
-					m.activePane = paneForm
-					m.inputs[m.focused].Focus()
-				}
-			}
-			return m, nil
-
-		case "tab", "down":
-			if m.activePane == paneForm {
-				m.inputs[m.focused].Blur()
-				m.focused = (m.focused + 1) % fieldCount
-				m.inputs[m.focused].Focus()
-				return m, nil
-			}
-		case "shift+tab", "up":
-			if m.activePane == paneForm {
-				m.inputs[m.focused].Blur()
-				m.focused = (m.focused - 1 + fieldCount) % fieldCount
-				m.inputs[m.focused].Focus()
-				return m, nil
-			}
-
-		case "enter":
+		case tea.KeyEnter:
 			if m.activePane == paneList {
 				// Populate form from selected list item and connect.
 				if item, ok := m.connList.SelectedItem().(connItem); ok {
@@ -185,6 +157,35 @@ func (m ConnectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, m.submitForm()
+
+		case tea.KeyTab, tea.KeyDown:
+			if m.activePane == paneForm {
+				m.inputs[m.focused].Blur()
+				m.focused = (m.focused + 1) % fieldCount
+				m.inputs[m.focused].Focus()
+				return m, nil
+			}
+		case tea.KeyShiftTab, tea.KeyUp:
+			if m.activePane == paneForm {
+				m.inputs[m.focused].Blur()
+				m.focused = (m.focused - 1 + fieldCount) % fieldCount
+				m.inputs[m.focused].Focus()
+				return m, nil
+			}
+
+		case tea.KeyCtrlRight:
+			if m.hasItems && m.activePane == paneForm {
+				m.inputs[m.focused].Blur()
+				m.activePane = paneList
+			}
+			return m, nil
+
+		case tea.KeyCtrlLeft:
+			if m.activePane == paneList {
+				m.activePane = paneForm
+				m.inputs[m.focused].Focus()
+			}
+			return m, nil
 		}
 	}
 
@@ -286,12 +287,8 @@ func (m ConnectionModel) View() string {
 	box := boxStyle.Render(form)
 
 	title := titleStyle.Render("SSH TUI - New Connection")
-	paneHint := "Ctrl+L: connection list"
-	if m.activePane == paneList {
-		paneHint = "Ctrl+L: form"
-	}
 	hint := lipgloss.NewStyle().Foreground(lipgloss.Color("#555555")).Render(
-		"Tab/↑↓: navigate • Enter: connect • " + paneHint + " • Ctrl+C: quit",
+		"Tab/↑↓: navigate • Enter: connect • Ctrl + ←/→: switch pane • Ctrl + C: quit",
 	)
 
 	var errMsg string

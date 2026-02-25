@@ -359,10 +359,10 @@ func TestConnectionModelTextInput(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// ConnectionModel - Ctrl+L pane toggle
+// ConnectionModel - Ctrl+Arrow pane toggle
 // ---------------------------------------------------------------------------
 
-func TestConnectionModelCtrlLToggleWithItems(t *testing.T) {
+func TestConnectionModelCtrlRightSwitchesToList(t *testing.T) {
 	cfg := &config.Config{
 		RecentConnections: []config.Connection{
 			{Name: "srv", Host: "h1", Port: "22", Username: "u1"},
@@ -373,31 +373,56 @@ func TestConnectionModelCtrlLToggleWithItems(t *testing.T) {
 		t.Fatal("should start in form pane")
 	}
 
-	ctrlL := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l"), Alt: true}
-	// Simulate ctrl+l — the key string is "ctrl+l"
-	ctrlLMsg := tea.KeyMsg{Type: tea.KeyCtrlL}
-	model, _ := m.Update(ctrlLMsg)
-	_ = ctrlL // prevent unused
+	ctrlRight := tea.KeyMsg{Type: tea.KeyCtrlRight}
+	model, _ := m.Update(ctrlRight)
 	m = model.(ConnectionModel)
 	if m.activePane != paneList {
-		t.Error("Ctrl+L should switch to list pane")
-	}
-
-	model, _ = m.Update(ctrlLMsg)
-	m = model.(ConnectionModel)
-	if m.activePane != paneForm {
-		t.Error("Ctrl+L again should switch back to form pane")
+		t.Error("Ctrl+Right should switch to list pane")
 	}
 }
 
-func TestConnectionModelCtrlLNoItems(t *testing.T) {
-	cfg := &config.Config{}
+func TestConnectionModelCtrlLeftSwitchesToForm(t *testing.T) {
+	cfg := &config.Config{
+		RecentConnections: []config.Connection{
+			{Name: "srv", Host: "h1", Port: "22", Username: "u1"},
+		},
+	}
 	m := NewConnectionModelWithSSH(cfg, nil)
-	ctrlLMsg := tea.KeyMsg{Type: tea.KeyCtrlL}
-	model, _ := m.Update(ctrlLMsg)
+	// Move to list first
+	ctrlRight := tea.KeyMsg{Type: tea.KeyCtrlRight}
+	model, _ := m.Update(ctrlRight)
+	m = model.(ConnectionModel)
+	if m.activePane != paneList {
+		t.Fatal("should be in list pane after Ctrl+Right")
+	}
+
+	ctrlLeft := tea.KeyMsg{Type: tea.KeyCtrlLeft}
+	model, _ = m.Update(ctrlLeft)
 	m = model.(ConnectionModel)
 	if m.activePane != paneForm {
-		t.Error("Ctrl+L with no items should stay in form pane")
+		t.Error("Ctrl+Left should switch back to form pane")
+	}
+}
+
+func TestConnectionModelCtrlRightNoItems(t *testing.T) {
+	cfg := &config.Config{}
+	m := NewConnectionModelWithSSH(cfg, nil)
+	ctrlRight := tea.KeyMsg{Type: tea.KeyCtrlRight}
+	model, _ := m.Update(ctrlRight)
+	m = model.(ConnectionModel)
+	if m.activePane != paneForm {
+		t.Error("Ctrl+Right with no items should stay in form pane")
+	}
+}
+
+func TestConnectionModelCtrlLeftAlreadyInForm(t *testing.T) {
+	cfg := &config.Config{}
+	m := NewConnectionModelWithSSH(cfg, nil)
+	ctrlLeft := tea.KeyMsg{Type: tea.KeyCtrlLeft}
+	model, _ := m.Update(ctrlLeft)
+	m = model.(ConnectionModel)
+	if m.activePane != paneForm {
+		t.Error("Ctrl+Left when already in form should stay in form pane")
 	}
 }
 

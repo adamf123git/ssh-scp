@@ -183,11 +183,21 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c":
+		switch msg.Type {
+		case tea.KeyCtrlC:
 			m.cleanup()
 			return m, tea.Quit
 
+		case tea.KeyEnter:
+			if m.state == stateHostKeyPrompt && m.pending != nil {
+				pending := m.pending
+				m.pending = nil
+				m.state = stateConnection
+				return m, connectWithAcceptedKey(pending)
+			}
+		}
+
+		switch msg.String() {
 		case "?":
 			if m.state == stateMain {
 				m.showHelp = !m.showHelp
@@ -220,14 +230,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.focus = paneTerminal
 				}
 				return m, nil
-			}
-
-		case "enter":
-			if m.state == stateHostKeyPrompt && m.pending != nil {
-				pending := m.pending
-				m.pending = nil
-				m.state = stateConnection
-				return m, connectWithAcceptedKey(pending)
 			}
 
 		case "n", "N":
