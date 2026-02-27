@@ -9,6 +9,7 @@ import (
 
 	sshclient "ssh-scp/internal/ssh"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -27,6 +28,22 @@ type TransferDoneMsg struct {
 
 // RefreshRemoteMsg requests a refresh of the remote file list.
 type RefreshRemoteMsg struct{}
+
+// fileOpKind identifies which file management operation is being performed.
+type fileOpKind int
+
+const (
+	opNone   fileOpKind = iota
+	opMkDir             // create a new directory
+	opDelete            // delete the selected file/dir
+	opRename            // rename the selected file/dir
+)
+
+// FileOpDoneMsg is sent when a file management operation completes.
+type FileOpDoneMsg struct {
+	Op  fileOpKind
+	Err error
+}
 
 type panelFocus int
 
@@ -54,6 +71,14 @@ type FileBrowserModel struct {
 	transferProgress string
 	statusMsg        string
 	client           *sshclient.Client
+
+	// File operation input dialog state.
+	inputActive bool
+	inputOp     fileOpKind
+	inputPrompt string
+	inputModel  textinput.Model
+	// confirmDelete is true when waiting for y/n delete confirmation.
+	confirmDelete bool
 }
 
 // NewFileBrowserModel creates a new file browser model.
@@ -151,7 +176,33 @@ func (m FileBrowserModel) Update(msg tea.Msg) (FileBrowserModel, tea.Cmd) {
 			return m, refreshRemoteCmd(m.client, m.remoteDir)
 		}
 
+	case FileOpDoneMsg:
+		if msg.Err != nil {
+			log.Printf("[FileBrowser] file op %d failed: %v", msg.Op, msg.Err)
+			m.statusMsg = fmt.Sprintf("Operation failed: %s", msg.Err.Error())
+		} else {
+			switch msg.Op {
+			case opMkDir:
+				m.statusMsg = "Directory created"
+			case opDelete:
+				m.statusMsg = "Deleted successfully"
+			case opRename:
+				m.statusMsg = "Renamed successfully"
+			}
+			m.refreshLocal()
+			return m, refreshRemoteCmd(m.client, m.remoteDir)
+		}
+
 	case tea.KeyMsg:
+		// When the text input dialog is active, route keys there.
+		if m.inputActive {
+			return m.handleInputKey(msg)
+		}
+		// When waiting for delete confirmation, handle y/n.
+		if m.confirmDelete {
+			return m.handleConfirmDelete(msg)
+		}
+
 		switch msg.String() {
 		case "tab", "ctrl+right", "ctrl+left":
 			if m.focus == panelLocal {
@@ -242,23 +293,9 @@ func (m FileBrowserModel) Update(msg tea.Msg) (FileBrowserModel, tea.Cmd) {
 			}
 
 		case "ctrl+u":
-			if !m.transferring && len(m.localFiles) > 0 {
-				f := m.localFiles[m.localCursor]
-				if !f.IsDir() {
-					localPath := filepath.Join(m.localDir, f.Name())
-					remotePath := joinRemotePath(m.remoteDir, f.Name())
-					m.transferring = true
-					m.transferProgress = f.Name()
-					m.statusMsg = "Uploading " + f.Name() + "..."
-					client := m.client
-					return m, func() tea.Msg {
-						err := client.UploadFile(localPath, remotePath)
-						return TransferDoneMsg{Err: err}
-					}
-				}
-			}
+			// Legacy binding removed — use ctrl+t for context-aware transfer.
 
-		case "T":
+		case "ctrl+t":
 			// Context-aware transfer: upload if local panel focused, download if remote panel focused.
 			if !m.transferring {
 				if m.focus == panelLocal && len(m.localFiles) > 0 {
@@ -293,24 +330,175 @@ func (m FileBrowserModel) Update(msg tea.Msg) (FileBrowserModel, tea.Cmd) {
 			}
 
 		case "ctrl+d":
-			if !m.transferring && len(m.remoteFiles) > 0 {
-				f := m.remoteFiles[m.remoteCursor]
-				if !f.IsDir {
-					remotePath := joinRemotePath(m.remoteDir, f.Name)
-					m.transferring = true
-					m.transferProgress = f.Name
-					m.statusMsg = "Downloading " + f.Name + "..."
-					client := m.client
-					localDir := m.localDir
-					return m, func() tea.Msg {
-						err := client.DownloadFile(remotePath, localDir)
-						return TransferDoneMsg{Err: err}
-					}
-				}
+			name := m.selectedName()
+			if name != "" {
+				m.confirmDelete = true
+				m.statusMsg = fmt.Sprintf("Delete '%s'? (y/n)", name)
+			}
+			return m, nil
+
+		case "ctrl+k":
+			m.startInput(opMkDir, "New directory name:")
+			return m, nil
+
+		case "ctrl+r":
+			name := m.selectedName()
+			if name != "" {
+				m.startInput(opRename, "Rename '"+name+"' to:")
+				return m, nil
 			}
 		}
 	}
 	return m, nil
+}
+
+// selectedName returns the name of the currently selected file/dir, or "" if
+// the list is empty.
+func (m FileBrowserModel) selectedName() string {
+	if m.focus == panelLocal {
+		if len(m.localFiles) == 0 {
+			return ""
+		}
+		return m.localFiles[m.localCursor].Name()
+	}
+	if len(m.remoteFiles) == 0 {
+		return ""
+	}
+	return m.remoteFiles[m.remoteCursor].Name
+}
+
+// startInput opens the inline text input dialog for the given operation.
+func (m *FileBrowserModel) startInput(op fileOpKind, prompt string) {
+	ti := textinput.New()
+	ti.CharLimit = 256
+	ti.Width = 40
+	ti.Focus()
+	m.inputActive = true
+	m.inputOp = op
+	m.inputPrompt = prompt
+	m.inputModel = ti
+}
+
+// handleInputKey processes key events while the text input is active.
+func (m FileBrowserModel) handleInputKey(msg tea.KeyMsg) (FileBrowserModel, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.inputActive = false
+		m.statusMsg = ""
+		return m, nil
+	case tea.KeyEnter:
+		value := strings.TrimSpace(m.inputModel.Value())
+		m.inputActive = false
+		if value == "" {
+			m.statusMsg = "Cancelled (empty name)"
+			return m, nil
+		}
+		return m.executeFileOp(m.inputOp, value)
+	}
+	var cmd tea.Cmd
+	m.inputModel, cmd = m.inputModel.Update(msg)
+	return m, cmd
+}
+
+// handleConfirmDelete processes y/n key events for delete confirmation.
+func (m FileBrowserModel) handleConfirmDelete(msg tea.KeyMsg) (FileBrowserModel, tea.Cmd) {
+	m.confirmDelete = false
+	switch msg.String() {
+	case "y", "Y":
+		return m.executeDelete()
+	default:
+		m.statusMsg = "Delete cancelled"
+		return m, nil
+	}
+}
+
+// executeFileOp dispatches the actual file operation as an async tea.Cmd.
+func (m FileBrowserModel) executeFileOp(op fileOpKind, name string) (FileBrowserModel, tea.Cmd) {
+	switch op {
+	case opMkDir:
+		return m.executeMkDir(name)
+	case opRename:
+		return m.executeRename(name)
+	}
+	return m, nil
+}
+
+// executeMkDir creates a directory locally or remotely.
+func (m FileBrowserModel) executeMkDir(name string) (FileBrowserModel, tea.Cmd) {
+	if m.focus == panelLocal {
+		dir := filepath.Join(m.localDir, name)
+		m.statusMsg = "Creating directory..."
+		return m, func() tea.Msg {
+			err := os.MkdirAll(dir, 0o755)
+			return FileOpDoneMsg{Op: opMkDir, Err: err}
+		}
+	}
+	// Remote
+	dir := joinRemotePath(m.remoteDir, name)
+	client := m.client
+	m.statusMsg = "Creating remote directory..."
+	return m, func() tea.Msg {
+		err := client.MkDir(dir)
+		return FileOpDoneMsg{Op: opMkDir, Err: err}
+	}
+}
+
+// executeDelete deletes the selected file/dir locally or remotely.
+func (m FileBrowserModel) executeDelete() (FileBrowserModel, tea.Cmd) {
+	if m.focus == panelLocal {
+		if len(m.localFiles) == 0 {
+			return m, nil
+		}
+		f := m.localFiles[m.localCursor]
+		path := filepath.Join(m.localDir, f.Name())
+		m.statusMsg = "Deleting..."
+		return m, func() tea.Msg {
+			err := os.RemoveAll(path)
+			return FileOpDoneMsg{Op: opDelete, Err: err}
+		}
+	}
+	// Remote
+	if len(m.remoteFiles) == 0 {
+		return m, nil
+	}
+	f := m.remoteFiles[m.remoteCursor]
+	path := joinRemotePath(m.remoteDir, f.Name)
+	client := m.client
+	m.statusMsg = "Deleting remote file..."
+	return m, func() tea.Msg {
+		err := client.Remove(path)
+		return FileOpDoneMsg{Op: opDelete, Err: err}
+	}
+}
+
+// executeRename renames the selected file/dir locally or remotely.
+func (m FileBrowserModel) executeRename(newName string) (FileBrowserModel, tea.Cmd) {
+	if m.focus == panelLocal {
+		if len(m.localFiles) == 0 {
+			return m, nil
+		}
+		f := m.localFiles[m.localCursor]
+		oldPath := filepath.Join(m.localDir, f.Name())
+		newPath := filepath.Join(m.localDir, newName)
+		m.statusMsg = "Renaming..."
+		return m, func() tea.Msg {
+			err := os.Rename(oldPath, newPath)
+			return FileOpDoneMsg{Op: opRename, Err: err}
+		}
+	}
+	// Remote
+	if len(m.remoteFiles) == 0 {
+		return m, nil
+	}
+	f := m.remoteFiles[m.remoteCursor]
+	oldPath := joinRemotePath(m.remoteDir, f.Name)
+	newPath := joinRemotePath(m.remoteDir, newName)
+	client := m.client
+	m.statusMsg = "Renaming remote file..."
+	return m, func() tea.Msg {
+		err := client.Rename(oldPath, newPath)
+		return FileOpDoneMsg{Op: opRename, Err: err}
+	}
 }
 
 var (
@@ -473,8 +661,16 @@ func (m FileBrowserModel) View() string {
 	remote := m.renderRemotePanel(panelWidth, panelHeight)
 	panels := lipgloss.JoinHorizontal(lipgloss.Top, local, remote)
 
+	// Show inline input dialog when active.
+	if m.inputActive {
+		inputLine := statusBarStyle.Render(
+			fmt.Sprintf(" %s ", m.inputPrompt),
+		) + m.inputModel.View()
+		return lipgloss.JoinVertical(lipgloss.Left, panels, inputLine)
+	}
+
 	statusLine := statusBarStyle.Render(
-		fmt.Sprintf(" Ctrl + ←/→: switch panels • Ctrl + U: upload • Ctrl + D: download • Backspace: up dir | %s", m.statusMsg),
+		fmt.Sprintf(" ←/→: panels • Ctrl+T: transfer • Ctrl+K: mkdir • Ctrl+D: delete • Ctrl+R: rename | %s", m.statusMsg),
 	)
 
 	return lipgloss.JoinVertical(lipgloss.Left, panels, statusLine)
@@ -518,6 +714,12 @@ func (m *FileBrowserModel) RefreshLocal() {
 // RefreshRemoteCmd returns a command to refresh the remote file listing.
 func (m FileBrowserModel) RefreshRemoteCmd() tea.Cmd {
 	return refreshRemoteCmd(m.client, m.remoteDir)
+}
+
+// InputActive reports whether the file browser has an active text input dialog
+// or is awaiting delete confirmation, meaning it should capture all key events.
+func (m FileBrowserModel) InputActive() bool {
+	return m.inputActive || m.confirmDelete
 }
 
 // joinRemotePath joins a remote directory and a filename, avoiding double slashes.

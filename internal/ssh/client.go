@@ -379,6 +379,45 @@ func (c *Client) WriteFile(path, content string) error {
 	return session.Run(cmd)
 }
 
+// MkDir creates a directory on the remote host.
+func (c *Client) MkDir(path string) error {
+	log.Printf("[SSH] mkdir: %s", path)
+	session, err := c.client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = session.Close() }()
+
+	cmd := fmt.Sprintf("mkdir -p %s", shellQuote(path))
+	return session.Run(cmd)
+}
+
+// Remove removes a file or directory on the remote host.
+func (c *Client) Remove(path string) error {
+	log.Printf("[SSH] remove: %s", path)
+	session, err := c.client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = session.Close() }()
+
+	cmd := fmt.Sprintf("rm -rf %s", shellQuote(path))
+	return session.Run(cmd)
+}
+
+// Rename renames (moves) a file or directory on the remote host.
+func (c *Client) Rename(oldPath, newPath string) error {
+	log.Printf("[SSH] rename: %s -> %s", oldPath, newPath)
+	session, err := c.client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = session.Close() }()
+
+	cmd := fmt.Sprintf("mv %s %s", shellQuote(oldPath), shellQuote(newPath))
+	return session.Run(cmd)
+}
+
 // parseLS parses `ls -la` output into RemoteFile entries.
 func parseLS(output string) []RemoteFile {
 	var files []RemoteFile

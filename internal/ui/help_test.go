@@ -14,7 +14,7 @@ func TestRenderHelpNonEmpty(t *testing.T) {
 
 func TestRenderHelpContainsBindings(t *testing.T) {
 	got := RenderHelp(120, 50)
-	bindings := []string{"Ctrl+U", "Ctrl+D", "Ctrl+N", "Ctrl+W", "Tab", "Enter", "Backspace", "Ctrl+C"}
+	bindings := []string{"Ctrl+T", "Ctrl+K", "Ctrl+D", "Ctrl+R", "Ctrl+N", "Ctrl+W", "Tab", "Enter", "Backspace", "Ctrl+C"}
 	for _, b := range bindings {
 		if !strings.Contains(got, b) {
 			t.Errorf("help should contain %q", b)
@@ -24,7 +24,7 @@ func TestRenderHelpContainsBindings(t *testing.T) {
 
 func TestRenderHelpContainsDescriptions(t *testing.T) {
 	got := RenderHelp(100, 40)
-	descriptions := []string{"local", "remote", "Upload", "Download", "help", "Quit"}
+	descriptions := []string{"local", "remote", "Transfer", "help", "Quit"}
 	for _, d := range descriptions {
 		if !strings.Contains(got, d) {
 			t.Errorf("help should contain description %q", d)
@@ -50,5 +50,15 @@ func TestRenderHelpSmallDimensions(t *testing.T) {
 	got := RenderHelp(20, 10)
 	if got == "" {
 		t.Error("RenderHelp should still return content at small dimensions")
+	}
+}
+
+func TestRenderHelpContainsFileOpsBindings(t *testing.T) {
+	got := RenderHelp(120, 60)
+	fileOps := []string{"Create new directory", "Delete selected", "Rename selected"}
+	for _, b := range fileOps {
+		if !strings.Contains(got, b) {
+			t.Errorf("help should contain file op binding %q", b)
+		}
 	}
 }

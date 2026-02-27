@@ -822,8 +822,8 @@ func TestFBViewWithFiles(t *testing.T) {
 	m.remoteFiles = []sshclient.RemoteFile{{Name: "remote.txt", Size: 512}}
 
 	view := m.View()
-	if !strings.Contains(view, "Ctrl") {
-		t.Error("view should contain status bar with Ctrl hint")
+	if !strings.Contains(view, "panels") {
+		t.Error("view should contain status bar with keybinding hints")
 	}
 }
 
@@ -1023,10 +1023,10 @@ func TestFBViewMinimalHeight(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// FileBrowserModel - Ctrl+U upload (local panel, file selected)
+// FileBrowserModel - Ctrl+T transfer (context-aware: upload local, download remote)
 // ---------------------------------------------------------------------------
 
-func TestFBCtrlUUpload(t *testing.T) {
+func TestFBCtrlTUploadLocal(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(dir+"/upload.txt", []byte("data"), 0644); err != nil {
 		t.Fatal(err)
@@ -1037,10 +1037,10 @@ func TestFBCtrlUUpload(t *testing.T) {
 	m.width = 80
 	m.focus = panelLocal
 
-	msg := tea.KeyMsg{Type: tea.KeyCtrlU}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlT}
 	m, cmd := m.Update(msg)
 	if !m.transferring {
-		t.Error("transferring should be true after ctrl+u")
+		t.Error("transferring should be true after ctrl+t on local file")
 	}
 	if m.transferProgress != "upload.txt" {
 		t.Errorf("transferProgress = %q, want upload.txt", m.transferProgress)
@@ -1053,7 +1053,7 @@ func TestFBCtrlUUpload(t *testing.T) {
 	}
 }
 
-func TestFBCtrlUOnDir(t *testing.T) {
+func TestFBCtrlTOnDirLocal(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(dir+"/subdir", 0755); err != nil {
 		t.Fatal(err)
@@ -1072,7 +1072,7 @@ func TestFBCtrlUOnDir(t *testing.T) {
 		}
 	}
 
-	msg := tea.KeyMsg{Type: tea.KeyCtrlU}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlT}
 	m, cmd := m.Update(msg)
 	if m.transferring {
 		t.Error("should not transfer directory")
@@ -1082,7 +1082,7 @@ func TestFBCtrlUOnDir(t *testing.T) {
 	}
 }
 
-func TestFBCtrlUWhileTransferring(t *testing.T) {
+func TestFBCtrlTWhileTransferring(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(dir+"/f.txt", []byte("x"), 0644); err != nil {
 		t.Fatal(err)
@@ -1092,18 +1092,14 @@ func TestFBCtrlUWhileTransferring(t *testing.T) {
 	m.height = 30
 	m.transferring = true
 
-	msg := tea.KeyMsg{Type: tea.KeyCtrlU}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlT}
 	m, cmd := m.Update(msg)
 	if cmd != nil {
 		t.Error("should not start another transfer while transferring")
 	}
 }
 
-// ---------------------------------------------------------------------------
-// FileBrowserModel - Ctrl+D download (remote panel, file selected)
-// ---------------------------------------------------------------------------
-
-func TestFBCtrlDDownload(t *testing.T) {
+func TestFBCtrlTDownloadRemote(t *testing.T) {
 	dir := t.TempDir()
 	m := FileBrowserModel{
 		focus:     panelRemote,
@@ -1116,10 +1112,10 @@ func TestFBCtrlDDownload(t *testing.T) {
 		height:       30,
 	}
 
-	msg := tea.KeyMsg{Type: tea.KeyCtrlD}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlT}
 	m, cmd := m.Update(msg)
 	if !m.transferring {
-		t.Error("transferring should be true after ctrl+d")
+		t.Error("transferring should be true after ctrl+t on remote file")
 	}
 	if m.transferProgress != "download.txt" {
 		t.Errorf("transferProgress = %q, want download.txt", m.transferProgress)
@@ -1132,7 +1128,7 @@ func TestFBCtrlDDownload(t *testing.T) {
 	}
 }
 
-func TestFBCtrlDOnDir(t *testing.T) {
+func TestFBCtrlTOnDirRemote(t *testing.T) {
 	m := FileBrowserModel{
 		focus:     panelRemote,
 		remoteDir: "/home",
@@ -1143,7 +1139,7 @@ func TestFBCtrlDOnDir(t *testing.T) {
 		height:       30,
 	}
 
-	msg := tea.KeyMsg{Type: tea.KeyCtrlD}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlT}
 	m, cmd := m.Update(msg)
 	if m.transferring {
 		t.Error("should not transfer directory")
@@ -1153,7 +1149,7 @@ func TestFBCtrlDOnDir(t *testing.T) {
 	}
 }
 
-func TestFBCtrlDWhileTransferring(t *testing.T) {
+func TestFBCtrlTWhileTransferringRemote(t *testing.T) {
 	m := FileBrowserModel{
 		focus:     panelRemote,
 		remoteDir: "/home",
@@ -1164,137 +1160,36 @@ func TestFBCtrlDWhileTransferring(t *testing.T) {
 		height:       30,
 	}
 
-	msg := tea.KeyMsg{Type: tea.KeyCtrlD}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlT}
 	_, cmd := m.Update(msg)
 	if cmd != nil {
 		t.Error("should not start another transfer while transferring")
 	}
 }
 
-func TestFBCtrlDEmptyFiles(t *testing.T) {
+func TestFBCtrlTEmptyLocalFiles(t *testing.T) {
 	m := FileBrowserModel{
-		focus:     panelRemote,
-		remoteDir: "/home",
-		height:    30,
+		focus:    panelLocal,
+		localDir: "/nonexistent",
+		height:   30,
 	}
-
-	msg := tea.KeyMsg{Type: tea.KeyCtrlD}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlT}
 	_, cmd := m.Update(msg)
 	if cmd != nil {
 		t.Error("should not start transfer with empty files")
 	}
 }
 
-// ---------------------------------------------------------------------------
-// FileBrowserModel - T key (context-aware transfer)
-// ---------------------------------------------------------------------------
-
-func TestFBTKeyUploadLocal(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(dir+"/t.txt", []byte("x"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	m := NewFileBrowserModel(nil, dir, "/remote")
-	m.height = 30
-	m.width = 80
-	m.focus = panelLocal
-
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")}
-	m, cmd := m.Update(msg)
-	if !m.transferring {
-		t.Error("T on local should start upload")
-	}
-	if cmd == nil {
-		t.Error("should return transfer command")
-	}
-}
-
-func TestFBTKeyDownloadRemote(t *testing.T) {
-	dir := t.TempDir()
-	m := FileBrowserModel{
-		focus:     panelRemote,
-		localDir:  dir,
-		remoteDir: "/home",
-		remoteFiles: []sshclient.RemoteFile{
-			{Name: "r.txt", IsDir: false},
-		},
-		height: 30,
-	}
-
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")}
-	m, cmd := m.Update(msg)
-	if !m.transferring {
-		t.Error("T on remote should start download")
-	}
-	if cmd == nil {
-		t.Error("should return transfer command")
-	}
-}
-
-func TestFBTKeyOnDirLocal(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(dir+"/sub", 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	m := NewFileBrowserModel(nil, dir, "/remote")
-	m.height = 30
-	m.width = 80
-	m.focus = panelLocal
-
-	// Find dir
-	for i, f := range m.localFiles {
-		if f.IsDir() {
-			m.localCursor = i
-			break
-		}
-	}
-
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")}
-	m, cmd := m.Update(msg)
-	if m.transferring {
-		t.Error("T on local dir should not start transfer")
-	}
-	if cmd != nil {
-		t.Error("should not return command")
-	}
-}
-
-func TestFBTKeyOnDirRemote(t *testing.T) {
+func TestFBCtrlTEmptyRemoteFiles(t *testing.T) {
 	m := FileBrowserModel{
 		focus:     panelRemote,
 		remoteDir: "/home",
-		remoteFiles: []sshclient.RemoteFile{
-			{Name: "subdir", IsDir: true},
-		},
-		height: 30,
+		height:    30,
 	}
-
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")}
-	m, cmd := m.Update(msg)
-	if m.transferring {
-		t.Error("T on remote dir should not start transfer")
-	}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlT}
+	_, cmd := m.Update(msg)
 	if cmd != nil {
-		t.Error("should not return command")
-	}
-}
-
-func TestFBTKeyWhileTransferring(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(dir+"/f.txt", []byte("x"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	m := NewFileBrowserModel(nil, dir, "/remote")
-	m.transferring = true
-	m.height = 30
-
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")}
-	m, cmd := m.Update(msg)
-	if cmd != nil {
-		t.Error("T while transferring should not start new transfer")
+		t.Error("should not start transfer with empty remote files")
 	}
 }
 
@@ -1323,48 +1218,783 @@ func TestFBRefreshLocalBadDir(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// FileBrowserModel - Ctrl+U with empty local files
+// selectedName
 // ---------------------------------------------------------------------------
 
-func TestFBCtrlUEmptyFiles(t *testing.T) {
-	m := FileBrowserModel{
-		focus:    panelLocal,
-		localDir: "/nonexistent",
-		height:   30,
+func TestSelectedNameLocal(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/hello.txt", []byte("x"), 0644); err != nil {
+		t.Fatal(err)
 	}
-	msg := tea.KeyMsg{Type: tea.KeyCtrlU}
-	_, cmd := m.Update(msg)
-	if cmd != nil {
-		t.Error("should not start transfer with empty files")
+	m := NewFileBrowserModel(nil, dir, "/remote")
+	m.focus = panelLocal
+	got := m.selectedName()
+	if got != "hello.txt" {
+		t.Errorf("selectedName local = %q, want hello.txt", got)
+	}
+}
+
+func TestSelectedNameRemote(t *testing.T) {
+	m := FileBrowserModel{
+		focus:       panelRemote,
+		remoteFiles: []sshclient.RemoteFile{{Name: "remote.txt"}},
+	}
+	got := m.selectedName()
+	if got != "remote.txt" {
+		t.Errorf("selectedName remote = %q, want remote.txt", got)
+	}
+}
+
+func TestSelectedNameEmptyLocal(t *testing.T) {
+	m := FileBrowserModel{focus: panelLocal}
+	got := m.selectedName()
+	if got != "" {
+		t.Errorf("selectedName empty local = %q, want empty", got)
+	}
+}
+
+func TestSelectedNameEmptyRemote(t *testing.T) {
+	m := FileBrowserModel{focus: panelRemote}
+	got := m.selectedName()
+	if got != "" {
+		t.Errorf("selectedName empty remote = %q, want empty", got)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// FileBrowserModel - T with empty files
+// InputActive
 // ---------------------------------------------------------------------------
 
-func TestFBTKeyEmptyLocalFiles(t *testing.T) {
-	m := FileBrowserModel{
-		focus:    panelLocal,
-		localDir: "/nonexistent",
-		height:   30,
-	}
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")}
-	_, cmd := m.Update(msg)
-	if cmd != nil {
-		t.Error("T with no files should not start transfer")
+func TestInputActiveDefault(t *testing.T) {
+	m := FileBrowserModel{}
+	if m.InputActive() {
+		t.Error("InputActive should be false by default")
 	}
 }
 
-func TestFBTKeyEmptyRemoteFiles(t *testing.T) {
+func TestInputActiveWhenInputActive(t *testing.T) {
+	m := FileBrowserModel{inputActive: true}
+	if !m.InputActive() {
+		t.Error("InputActive should be true when inputActive is set")
+	}
+}
+
+func TestInputActiveWhenConfirmDelete(t *testing.T) {
+	m := FileBrowserModel{confirmDelete: true}
+	if !m.InputActive() {
+		t.Error("InputActive should be true when confirmDelete is set")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Ctrl+K key (mkdir) — opens input dialog
+// ---------------------------------------------------------------------------
+
+func TestFBCtrlKKeyOpensInput(t *testing.T) {
+	m := FileBrowserModel{focus: panelLocal, height: 30}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlK}
+	m, cmd := m.Update(msg)
+	if !m.inputActive {
+		t.Error("Ctrl+K should activate input dialog")
+	}
+	if m.inputOp != opMkDir {
+		t.Errorf("inputOp = %d, want opMkDir(%d)", m.inputOp, opMkDir)
+	}
+	if !strings.Contains(m.inputPrompt, "directory") {
+		t.Errorf("inputPrompt = %q, want to contain 'directory'", m.inputPrompt)
+	}
+	if cmd != nil {
+		t.Error("Ctrl+K should not return a command (just opens dialog)")
+	}
+}
+
+func TestFBCtrlKKeyRemotePanel(t *testing.T) {
+	m := FileBrowserModel{focus: panelRemote, height: 30}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlK}
+	m, _ = m.Update(msg)
+	if !m.inputActive {
+		t.Error("Ctrl+K should activate input dialog on remote panel too")
+	}
+	if m.inputOp != opMkDir {
+		t.Errorf("inputOp = %d, want opMkDir", m.inputOp)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Ctrl+D key (delete) — opens confirmation
+// ---------------------------------------------------------------------------
+
+func TestFBCtrlDKeyOpensConfirm(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/del.txt", []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	m := NewFileBrowserModel(nil, dir, "/remote")
+	m.height = 30
+	m.focus = panelLocal
+
+	msg := tea.KeyMsg{Type: tea.KeyCtrlD}
+	m, cmd := m.Update(msg)
+	if !m.confirmDelete {
+		t.Error("Ctrl+D should set confirmDelete")
+	}
+	if !strings.Contains(m.statusMsg, "Delete") {
+		t.Errorf("statusMsg = %q, want Delete prompt", m.statusMsg)
+	}
+	if cmd != nil {
+		t.Error("Ctrl+D should not return a command (just opens confirm)")
+	}
+}
+
+func TestFBCtrlDKeyRemote(t *testing.T) {
+	m := FileBrowserModel{
+		focus:       panelRemote,
+		remoteFiles: []sshclient.RemoteFile{{Name: "file.txt"}},
+		height:      30,
+	}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlD}
+	m, _ = m.Update(msg)
+	if !m.confirmDelete {
+		t.Error("Ctrl+D should set confirmDelete on remote panel")
+	}
+	if !strings.Contains(m.statusMsg, "file.txt") {
+		t.Errorf("statusMsg = %q, should contain filename", m.statusMsg)
+	}
+}
+
+func TestFBCtrlDKeyEmptyFiles(t *testing.T) {
+	m := FileBrowserModel{focus: panelLocal, height: 30}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlD}
+	m, _ = m.Update(msg)
+	if m.confirmDelete {
+		t.Error("Ctrl+D with no files should not set confirmDelete")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Ctrl+R key (rename) — opens input dialog
+// ---------------------------------------------------------------------------
+
+func TestFBCtrlRKeyOpensInput(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/ren.txt", []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	m := NewFileBrowserModel(nil, dir, "/remote")
+	m.height = 30
+	m.focus = panelLocal
+
+	msg := tea.KeyMsg{Type: tea.KeyCtrlR}
+	m, cmd := m.Update(msg)
+	if !m.inputActive {
+		t.Error("Ctrl+R should activate input dialog")
+	}
+	if m.inputOp != opRename {
+		t.Errorf("inputOp = %d, want opRename(%d)", m.inputOp, opRename)
+	}
+	if !strings.Contains(m.inputPrompt, "Rename") {
+		t.Errorf("inputPrompt = %q, want to contain 'Rename'", m.inputPrompt)
+	}
+	if cmd != nil {
+		t.Error("R should not return a command (just opens dialog)")
+	}
+}
+
+func TestFBCtrlRKeyRemote(t *testing.T) {
+	m := FileBrowserModel{
+		focus:       panelRemote,
+		remoteFiles: []sshclient.RemoteFile{{Name: "remote.txt"}},
+		height:      30,
+	}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlR}
+	m, _ = m.Update(msg)
+	if !m.inputActive {
+		t.Error("Ctrl+R should activate input dialog on remote panel")
+	}
+	if !strings.Contains(m.inputPrompt, "remote.txt") {
+		t.Errorf("inputPrompt = %q, should contain filename", m.inputPrompt)
+	}
+}
+
+func TestFBCtrlRKeyEmptyFiles(t *testing.T) {
+	m := FileBrowserModel{focus: panelLocal, height: 30}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlR}
+	m, _ = m.Update(msg)
+	if m.inputActive {
+		t.Error("Ctrl+R with no files should not activate input")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Input dialog - Esc cancels
+// ---------------------------------------------------------------------------
+
+func TestFBInputEscCancels(t *testing.T) {
+	m := FileBrowserModel{focus: panelLocal, height: 30}
+	// Ctrl+K to open mkdir dialog
+	mKey := tea.KeyMsg{Type: tea.KeyCtrlK}
+	m, _ = m.Update(mKey)
+	if !m.inputActive {
+		t.Fatal("input should be active after Ctrl+K")
+	}
+
+	// Press Esc
+	escKey := tea.KeyMsg{Type: tea.KeyEsc}
+	m, _ = m.Update(escKey)
+	if m.inputActive {
+		t.Error("input should be inactive after Esc")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Input dialog - Enter with empty value cancels
+// ---------------------------------------------------------------------------
+
+func TestFBInputEnterEmptyCancels(t *testing.T) {
+	m := FileBrowserModel{focus: panelLocal, height: 30}
+	mKey := tea.KeyMsg{Type: tea.KeyCtrlK}
+	m, _ = m.Update(mKey)
+
+	enterKey := tea.KeyMsg{Type: tea.KeyEnter}
+	m, cmd := m.Update(enterKey)
+	if m.inputActive {
+		t.Error("input should be inactive after Enter with empty value")
+	}
+	if !strings.Contains(m.statusMsg, "Cancelled") {
+		t.Errorf("statusMsg = %q, want Cancelled", m.statusMsg)
+	}
+	if cmd != nil {
+		t.Error("empty name should not produce a command")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Input dialog - Enter with value triggers mkdir operation
+// ---------------------------------------------------------------------------
+
+func TestFBInputMkDirLocal(t *testing.T) {
+	dir := t.TempDir()
+	m := NewFileBrowserModel(nil, dir, "/remote")
+	m.height = 30
+	m.focus = panelLocal
+
+	// Ctrl+K to open mkdir dialog
+	mKey := tea.KeyMsg{Type: tea.KeyCtrlK}
+	m, _ = m.Update(mKey)
+
+	// Type "newdir"
+	for _, ch := range "newdir" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+	}
+
+	// Press Enter
+	enterKey := tea.KeyMsg{Type: tea.KeyEnter}
+	m, cmd := m.Update(enterKey)
+	if m.inputActive {
+		t.Error("input should be inactive after Enter")
+	}
+	if cmd == nil {
+		t.Fatal("should return a command for mkdir")
+	}
+
+	// Execute the command and check the result
+	result := cmd()
+	doneMsg, ok := result.(FileOpDoneMsg)
+	if !ok {
+		t.Fatalf("expected FileOpDoneMsg, got %T", result)
+	}
+	if doneMsg.Op != opMkDir {
+		t.Errorf("op = %d, want opMkDir", doneMsg.Op)
+	}
+	if doneMsg.Err != nil {
+		t.Errorf("unexpected error: %v", doneMsg.Err)
+	}
+
+	// Verify directory was created
+	info, err := os.Stat(dir + "/newdir")
+	if err != nil {
+		t.Fatalf("directory not created: %v", err)
+	}
+	if !info.IsDir() {
+		t.Error("expected directory, got file")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Delete confirmation - y confirms
+// ---------------------------------------------------------------------------
+
+func TestFBDeleteConfirmYes(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/todelete.txt", []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	m := NewFileBrowserModel(nil, dir, "/remote")
+	m.height = 30
+	m.focus = panelLocal
+
+	// Ctrl+D to initiate delete
+	dKey := tea.KeyMsg{Type: tea.KeyCtrlD}
+	m, _ = m.Update(dKey)
+	if !m.confirmDelete {
+		t.Fatal("confirmDelete should be true")
+	}
+
+	// Press y to confirm
+	yKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")}
+	m, cmd := m.Update(yKey)
+	if m.confirmDelete {
+		t.Error("confirmDelete should be false after y")
+	}
+	if cmd == nil {
+		t.Fatal("should return a command for delete")
+	}
+
+	// Execute and verify
+	result := cmd()
+	doneMsg, ok := result.(FileOpDoneMsg)
+	if !ok {
+		t.Fatalf("expected FileOpDoneMsg, got %T", result)
+	}
+	if doneMsg.Op != opDelete {
+		t.Errorf("op = %d, want opDelete", doneMsg.Op)
+	}
+	if doneMsg.Err != nil {
+		t.Errorf("unexpected error: %v", doneMsg.Err)
+	}
+
+	// Verify file was deleted
+	if _, err := os.Stat(dir + "/todelete.txt"); !os.IsNotExist(err) {
+		t.Error("file should have been deleted")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Delete confirmation - n cancels
+// ---------------------------------------------------------------------------
+
+func TestFBDeleteConfirmNo(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/keep.txt", []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	m := NewFileBrowserModel(nil, dir, "/remote")
+	m.height = 30
+	m.focus = panelLocal
+
+	// Ctrl+D
+	dKey := tea.KeyMsg{Type: tea.KeyCtrlD}
+	m, _ = m.Update(dKey)
+
+	// Press n to cancel
+	nKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+	m, cmd := m.Update(nKey)
+	if m.confirmDelete {
+		t.Error("confirmDelete should be false after n")
+	}
+	if !strings.Contains(m.statusMsg, "cancelled") {
+		t.Errorf("statusMsg = %q, want 'cancelled'", m.statusMsg)
+	}
+	if cmd != nil {
+		t.Error("cancelling delete should not return a command")
+	}
+
+	// File should still exist
+	if _, err := os.Stat(dir + "/keep.txt"); err != nil {
+		t.Error("file should still exist after cancel")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Rename via input dialog
+// ---------------------------------------------------------------------------
+
+func TestFBRenameLocal(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/old.txt", []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	m := NewFileBrowserModel(nil, dir, "/remote")
+	m.height = 30
+	m.focus = panelLocal
+
+	// Ctrl+R
+	rKey := tea.KeyMsg{Type: tea.KeyCtrlR}
+	m, _ = m.Update(rKey)
+	if !m.inputActive {
+		t.Fatal("input should be active after R")
+	}
+
+	// Type "new.txt"
+	for _, ch := range "new.txt" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+	}
+
+	// Press Enter
+	enterKey := tea.KeyMsg{Type: tea.KeyEnter}
+	m, cmd := m.Update(enterKey)
+	if cmd == nil {
+		t.Fatal("should return a command for rename")
+	}
+
+	// Execute
+	result := cmd()
+	doneMsg, ok := result.(FileOpDoneMsg)
+	if !ok {
+		t.Fatalf("expected FileOpDoneMsg, got %T", result)
+	}
+	if doneMsg.Op != opRename {
+		t.Errorf("op = %d, want opRename", doneMsg.Op)
+	}
+	if doneMsg.Err != nil {
+		t.Errorf("unexpected error: %v", doneMsg.Err)
+	}
+
+	// Verify old file is gone and new file exists
+	if _, err := os.Stat(dir + "/old.txt"); !os.IsNotExist(err) {
+		t.Error("old file should not exist after rename")
+	}
+	if _, err := os.Stat(dir + "/new.txt"); err != nil {
+		t.Error("new file should exist after rename")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FileOpDoneMsg handling
+// ---------------------------------------------------------------------------
+
+func TestFBFileOpDoneMsgSuccess(t *testing.T) {
+	dir := t.TempDir()
+	m := NewFileBrowserModel(nil, dir, "/remote")
+	m.height = 30
+
+	tests := []struct {
+		op   fileOpKind
+		want string
+	}{
+		{opMkDir, "created"},
+		{opDelete, "Deleted"},
+		{opRename, "Renamed"},
+	}
+	for _, tt := range tests {
+		m, _ = m.Update(FileOpDoneMsg{Op: tt.op, Err: nil})
+		if !strings.Contains(m.statusMsg, tt.want) {
+			t.Errorf("op %d: statusMsg = %q, want %q", tt.op, m.statusMsg, tt.want)
+		}
+	}
+}
+
+func TestFBFileOpDoneMsgError(t *testing.T) {
+	m := FileBrowserModel{height: 30}
+	m, _ = m.Update(FileOpDoneMsg{Op: opMkDir, Err: os.ErrPermission})
+	if !strings.Contains(m.statusMsg, "failed") {
+		t.Errorf("statusMsg = %q, want 'failed'", m.statusMsg)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Keys are routed to input when active
+// ---------------------------------------------------------------------------
+
+func TestFBKeysRoutedToInputWhenActive(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/a.txt", []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	m := NewFileBrowserModel(nil, dir, "/remote")
+	m.height = 30
+	m.focus = panelLocal
+
+	// Open input
+	mKey := tea.KeyMsg{Type: tea.KeyCtrlK}
+	m, _ = m.Update(mKey)
+
+	// Down key should NOT move cursor (should go to input instead)
+	downKey := tea.KeyMsg{Type: tea.KeyDown}
+	old := m.localCursor
+	m, _ = m.Update(downKey)
+	if m.localCursor != old {
+		t.Error("cursor should not move when input is active")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Keys are routed to confirm delete when active
+// ---------------------------------------------------------------------------
+
+func TestFBKeysRoutedToConfirmWhenActive(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/a.txt", []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir+"/b.txt", []byte("y"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	m := NewFileBrowserModel(nil, dir, "/remote")
+	m.height = 30
+	m.focus = panelLocal
+	m.confirmDelete = true
+
+	// Down key should not move cursor — it's in delete confirmation mode and "down" is not "y"
+	old := m.localCursor
+	downKey := tea.KeyMsg{Type: tea.KeyDown}
+	m, _ = m.Update(downKey)
+	if m.localCursor != old {
+		t.Error("cursor should not move during delete confirmation")
+	}
+	if m.confirmDelete {
+		t.Error("confirmDelete should be cleared after non-y/n key")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// View shows input when dialog is active
+// ---------------------------------------------------------------------------
+
+func TestFBViewShowsInputDialog(t *testing.T) {
+	m := FileBrowserModel{
+		focus:  panelLocal,
+		width:  80,
+		height: 30,
+	}
+	// Ctrl+K to open mkdir dialog
+	mKey := tea.KeyMsg{Type: tea.KeyCtrlK}
+	m, _ = m.Update(mKey)
+
+	view := m.View()
+	if !strings.Contains(view, "directory") {
+		t.Errorf("view should show input prompt, got %q", view)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// View status bar shows new keybindings
+// ---------------------------------------------------------------------------
+
+func TestFBViewStatusBarContent(t *testing.T) {
+	m := FileBrowserModel{width: 100, height: 30}
+	view := m.View()
+	for _, hint := range []string{"mkdir", "delete", "rename"} {
+		if !strings.Contains(view, hint) {
+			t.Errorf("status bar should mention %q", hint)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// MkDir remote (produces command with correct message type)
+// ---------------------------------------------------------------------------
+
+func TestFBMkDirRemote(t *testing.T) {
 	m := FileBrowserModel{
 		focus:     panelRemote,
-		remoteDir: "/home",
+		remoteDir: "/home/user",
 		height:    30,
 	}
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")}
-	_, cmd := m.Update(msg)
+	// Ctrl+K to open mkdir dialog
+	mKey := tea.KeyMsg{Type: tea.KeyCtrlK}
+	m, _ = m.Update(mKey)
+
+	// Type "newdir"
+	for _, ch := range "newdir" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+	}
+
+	// Press Enter — will produce a command that calls client.MkDir
+	// (client is nil here, so we just verify the cmd is returned)
+	enterKey := tea.KeyMsg{Type: tea.KeyEnter}
+	m, cmd := m.Update(enterKey)
+	if cmd == nil {
+		t.Error("remote mkdir should return a command")
+	}
+	if strings.Contains(m.statusMsg, "Cancelled") {
+		t.Error("should not cancel when name is provided")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Delete remote (produces command)
+// ---------------------------------------------------------------------------
+
+func TestFBDeleteRemote(t *testing.T) {
+	m := FileBrowserModel{
+		focus:     panelRemote,
+		remoteDir: "/home/user",
+		remoteFiles: []sshclient.RemoteFile{
+			{Name: "deleteme.txt"},
+		},
+		height: 30,
+	}
+
+	// Ctrl+D to start delete
+	dKey := tea.KeyMsg{Type: tea.KeyCtrlD}
+	m, _ = m.Update(dKey)
+	if !m.confirmDelete {
+		t.Fatal("confirmDelete should be set")
+	}
+
+	// Press y to confirm
+	yKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")}
+	m, cmd := m.Update(yKey)
+	if cmd == nil {
+		t.Error("remote delete should return a command")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Rename remote (produces command)
+// ---------------------------------------------------------------------------
+
+func TestFBRenameRemote(t *testing.T) {
+	m := FileBrowserModel{
+		focus:     panelRemote,
+		remoteDir: "/home/user",
+		remoteFiles: []sshclient.RemoteFile{
+			{Name: "old.txt"},
+		},
+		height: 30,
+	}
+
+	// Ctrl+R
+	rKey := tea.KeyMsg{Type: tea.KeyCtrlR}
+	m, _ = m.Update(rKey)
+
+	// Type new name
+	for _, ch := range "new.txt" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+	}
+
+	// Press Enter
+	enterKey := tea.KeyMsg{Type: tea.KeyEnter}
+	m, cmd := m.Update(enterKey)
+	if cmd == nil {
+		t.Error("remote rename should return a command")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Delete directory locally
+// ---------------------------------------------------------------------------
+
+func TestFBDeleteLocalDirectory(t *testing.T) {
+	dir := t.TempDir()
+	sub := dir + "/subdir"
+	if err := os.MkdirAll(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Put a file inside so we test recursive delete
+	if err := os.WriteFile(sub+"/inner.txt", []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewFileBrowserModel(nil, dir, "/remote")
+	m.height = 30
+	m.focus = panelLocal
+
+	// Find subdir cursor
+	for i, f := range m.localFiles {
+		if f.Name() == "subdir" {
+			m.localCursor = i
+			break
+		}
+	}
+
+	// D then y
+	dKey := tea.KeyMsg{Type: tea.KeyCtrlD}
+	m, _ = m.Update(dKey)
+	yKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")}
+	m, cmd := m.Update(yKey)
+	if cmd == nil {
+		t.Fatal("should return delete command")
+	}
+
+	result := cmd()
+	doneMsg := result.(FileOpDoneMsg)
+	if doneMsg.Err != nil {
+		t.Fatalf("delete dir failed: %v", doneMsg.Err)
+	}
+
+	if _, err := os.Stat(sub); !os.IsNotExist(err) {
+		t.Error("directory should have been deleted recursively")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FileOpDoneMsg refreshes listings on success
+// ---------------------------------------------------------------------------
+
+func TestFBFileOpDoneRefreshes(t *testing.T) {
+	dir := t.TempDir()
+	m := NewFileBrowserModel(nil, dir, "/remote")
+	m.height = 30
+
+	m, cmd := m.Update(FileOpDoneMsg{Op: opMkDir, Err: nil})
+	if cmd == nil {
+		t.Error("successful file op should return a refresh remote command")
+	}
+}
+
+func TestFBFileOpDoneErrorNoRefresh(t *testing.T) {
+	m := FileBrowserModel{height: 30}
+	m, cmd := m.Update(FileOpDoneMsg{Op: opMkDir, Err: os.ErrPermission})
 	if cmd != nil {
-		t.Error("T with no remote files should not start transfer")
+		t.Error("failed file op should not return a refresh command")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Delete with Y (uppercase) also confirms
+// ---------------------------------------------------------------------------
+
+func TestFBDeleteConfirmUpperY(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/f.txt", []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	m := NewFileBrowserModel(nil, dir, "/remote")
+	m.height = 30
+	m.focus = panelLocal
+
+	dKey := tea.KeyMsg{Type: tea.KeyCtrlD}
+	m, _ = m.Update(dKey)
+
+	yKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Y")}
+	m, cmd := m.Update(yKey)
+	if cmd == nil {
+		t.Error("Y should confirm delete")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Delete with empty files in remote
+// ---------------------------------------------------------------------------
+
+func TestFBDeleteRemoteEmptyFiles(t *testing.T) {
+	m := FileBrowserModel{
+		focus:  panelRemote,
+		height: 30,
+	}
+	dKey := tea.KeyMsg{Type: tea.KeyCtrlD}
+	m, _ = m.Update(dKey)
+	if m.confirmDelete {
+		t.Error("Ctrl+D with empty remote files should not open confirmation")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// startInput initializes textinput correctly
+// ---------------------------------------------------------------------------
+
+func TestStartInput(t *testing.T) {
+	m := FileBrowserModel{}
+	m.startInput(opRename, "Rename to:")
+	if !m.inputActive {
+		t.Error("inputActive should be true")
+	}
+	if m.inputOp != opRename {
+		t.Errorf("inputOp = %d, want opRename", m.inputOp)
+	}
+	if m.inputPrompt != "Rename to:" {
+		t.Errorf("inputPrompt = %q, want 'Rename to:'", m.inputPrompt)
 	}
 }

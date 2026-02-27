@@ -233,6 +233,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
+	case ui.FileOpDoneMsg:
+		if m.activeTab < len(m.browsers) {
+			browser, cmd := m.browsers[m.activeTab].Update(msg)
+			m.browsers[m.activeTab] = browser
+			return m, cmd
+		}
+
 	case ui.OpenEditorMsg:
 		log.Printf("[AppModel] OpenEditorMsg: path=%s remote=%v", msg.Path, msg.IsRemote)
 		if msg.IsRemote {
@@ -332,6 +339,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		// File browser input dialog captures all keys when active (except Ctrl+C).
+		if m.state == stateMain && m.activeTab < len(m.browsers) && m.browsers[m.activeTab].InputActive() {
+			if msg.Type == tea.KeyCtrlC {
+				m.cleanup()
+				return m, tea.Quit
+			}
+			browser, cmd := m.browsers[m.activeTab].Update(msg)
+			m.browsers[m.activeTab] = browser
+			return m, cmd
+		}
+
 		switch msg.Type {
 		case tea.KeyCtrlC:
 			m.cleanup()
@@ -368,7 +386,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.connModel.Init()
 			}
 
-		case "ctrl+t":
+		case "ctrl+]":
 			if m.state == stateMain && len(m.tabs) > 1 {
 				m.activeTab = (m.activeTab + 1) % len(m.tabs)
 				return m, nil
@@ -499,9 +517,9 @@ func (m AppModel) renderMain() string {
 
 	statusLine := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#555555")).
-		Render(" Ctrl+T: next tab • Ctrl+N: new tab • Ctrl+W: close tab • ?: help • Ctrl+C: quit" + errLine)
+		Render(" Ctrl+]: next tab • Ctrl+N: new tab • Ctrl+W: close tab • ?: help • Ctrl+C: quit" + errLine)
 
-	return lipgloss.JoinVertical(lipgloss.Left, tabBar, body, statusLine)
+	return lipgloss.JoinVertical(lipgloss.Left, statusLine, tabBar, body)
 }
 
 func (m *AppModel) cleanup() {

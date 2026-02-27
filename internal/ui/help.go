@@ -8,14 +8,15 @@ var helpContent = `
   File Browser
   Ctrl+←/→  Switch between local and remote panels
   Tab       Switch between local and remote panels
-  Ctrl+U    Upload selected local file to remote
-  Ctrl+D    Download selected remote file to local
-  Ctrl+T    Switch to next tab
+  Ctrl+T    Transfer selected file (upload or download)
+  Ctrl+K    Create new directory
+  Ctrl+D    Delete selected file/directory
+  Ctrl+R    Rename selected file/directory
+  Ctrl+]    Switch to next tab
   Ctrl+N    New connection tab
   Ctrl+W    Close current tab
   Enter     Navigate into directory / edit text file
   Backspace Go up one directory
-  T         Transfer selected file (contextual)
   ?         Toggle this help overlay
   Ctrl+C    Quit
 

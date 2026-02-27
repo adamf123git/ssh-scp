@@ -925,10 +925,10 @@ func TestAppModelPasswordResponseNoBridge(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// CtrlT tab cycling
+// Ctrl+] tab cycling
 // ---------------------------------------------------------------------------
 
-func TestAppModelCtrlTCyclesTabs(t *testing.T) {
+func TestAppModelCtrlCloseBracketCyclesTabs(t *testing.T) {
 	m := initialModel()
 	m.state = stateMain
 	m.tabs = []ui.Tab{{Title: "t1"}, {Title: "t2"}, {Title: "t3"}}
@@ -936,7 +936,7 @@ func TestAppModelCtrlTCyclesTabs(t *testing.T) {
 	m.browsers = []ui.FileBrowserModel{{}, {}, {}}
 	m.activeTab = 0
 
-	msg := tea.KeyMsg{Type: tea.KeyCtrlT}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlCloseBracket}
 	result, _ := m.Update(msg)
 	am := result.(AppModel)
 	if am.activeTab != 1 {
@@ -958,7 +958,7 @@ func TestAppModelCtrlTCyclesTabs(t *testing.T) {
 	}
 }
 
-func TestAppModelCtrlTSingleTab(t *testing.T) {
+func TestAppModelCtrlCloseBracketSingleTab(t *testing.T) {
 	m := initialModel()
 	m.state = stateMain
 	m.tabs = []ui.Tab{{Title: "t1"}}
@@ -966,10 +966,10 @@ func TestAppModelCtrlTSingleTab(t *testing.T) {
 	m.browsers = []ui.FileBrowserModel{{}}
 	m.activeTab = 0
 
-	msg := tea.KeyMsg{Type: tea.KeyCtrlT}
+	msg := tea.KeyMsg{Type: tea.KeyCtrlCloseBracket}
 	result, _ := m.Update(msg)
 	am := result.(AppModel)
-	// With only 1 tab, Ctrl+T should not change tab
+	// With only 1 tab, Ctrl+] should not change tab
 	if am.activeTab != 0 {
 		t.Errorf("activeTab = %d, want 0 (single tab)", am.activeTab)
 	}
