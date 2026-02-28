@@ -101,8 +101,8 @@ func TestNewConnectionModelWithRecent(t *testing.T) {
 		},
 	}
 	m := NewConnectionModelWithSSH(cfg, nil)
-	if !m.hasItems {
-		t.Error("hasItems should be true when recent connections exist")
+	if m.hasItems {
+		t.Error("hasItems should be false when only recent connections exist (they have their own section)")
 	}
 }
 
@@ -190,8 +190,10 @@ func TestConnectionModelEnterEmptyFields(t *testing.T) {
 func TestConnectionModelView(t *testing.T) {
 	cfg := &config.Config{}
 	m := NewConnectionModelWithSSH(cfg, nil)
+	m.width = 120
+	m.height = 40
 	view := m.View()
-	if !strings.Contains(view, "SSH TUI") {
+	if !strings.Contains(view, "╔═╗") {
 		t.Error("view should contain title")
 	}
 	if !strings.Contains(view, "Host") {
@@ -401,12 +403,9 @@ func TestConnectionModelTextInput(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestConnectionModelCtrlRightSwitchesToList(t *testing.T) {
-	cfg := &config.Config{
-		RecentConnections: []config.Connection{
-			{Name: "srv", Host: "h1", Port: "22", Username: "u1"},
-		},
-	}
-	m := NewConnectionModelWithSSH(cfg, nil)
+	cfg := &config.Config{}
+	hosts := []config.SSHHost{{Alias: "srv", HostName: "h1", User: "u1", Port: "22"}}
+	m := NewConnectionModelWithSSH(cfg, hosts)
 	if m.activePane != paneForm {
 		t.Fatal("should start in form pane")
 	}
@@ -420,12 +419,9 @@ func TestConnectionModelCtrlRightSwitchesToList(t *testing.T) {
 }
 
 func TestConnectionModelCtrlLeftSwitchesToForm(t *testing.T) {
-	cfg := &config.Config{
-		RecentConnections: []config.Connection{
-			{Name: "srv", Host: "h1", Port: "22", Username: "u1"},
-		},
-	}
-	m := NewConnectionModelWithSSH(cfg, nil)
+	cfg := &config.Config{}
+	hosts := []config.SSHHost{{Alias: "srv", HostName: "h1", User: "u1", Port: "22"}}
+	m := NewConnectionModelWithSSH(cfg, hosts)
 	// Move to list first
 	ctrlRight := tea.KeyMsg{Type: tea.KeyCtrlRight}
 	model, _ := m.Update(ctrlRight)
@@ -783,12 +779,9 @@ func TestSubmitFormIncludesAdvancedFields(t *testing.T) {
 }
 
 func TestCtrlRightFromToggle(t *testing.T) {
-	cfg := &config.Config{
-		RecentConnections: []config.Connection{
-			{Name: "srv", Host: "h1", Port: "22", Username: "u1"},
-		},
-	}
-	m := NewConnectionModelWithSSH(cfg, nil)
+	cfg := &config.Config{}
+	hosts := []config.SSHHost{{Alias: "srv", HostName: "h1", User: "u1", Port: "22"}}
+	m := NewConnectionModelWithSSH(cfg, hosts)
 	m.focusOnToggle = true
 
 	ctrlRight := tea.KeyMsg{Type: tea.KeyCtrlRight}
@@ -800,12 +793,9 @@ func TestCtrlRightFromToggle(t *testing.T) {
 }
 
 func TestCtrlLeftBackToToggle(t *testing.T) {
-	cfg := &config.Config{
-		RecentConnections: []config.Connection{
-			{Name: "srv", Host: "h1", Port: "22", Username: "u1"},
-		},
-	}
-	m := NewConnectionModelWithSSH(cfg, nil)
+	cfg := &config.Config{}
+	hosts := []config.SSHHost{{Alias: "srv", HostName: "h1", User: "u1", Port: "22"}}
+	m := NewConnectionModelWithSSH(cfg, hosts)
 	m.focusOnToggle = true
 	m.activePane = paneList
 
@@ -929,22 +919,22 @@ func TestViewTruncatesLongError(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Recent logins display and number-key selection
+// recent connections display and number-key selection
 // ---------------------------------------------------------------------------
 
 func TestViewShowsRecentLogins(t *testing.T) {
 	cfg := &config.Config{
 		RecentConnections: []config.Connection{
-			{Name: "admin@host1", Host: "host1.example.com", Port: "22", Username: "admin"},
-			{Name: "deploy@prod", Host: "prod.example.com", Port: "22", Username: "deploy"},
+			{Host: "host1.example.com", Port: "22", Username: "admin"},
+			{Host: "prod.example.com", Port: "22", Username: "deploy"},
 		},
 	}
 	m := NewConnectionModelWithSSH(cfg, nil)
 	m.width = 120
 	m.height = 40
 	view := m.View()
-	if !strings.Contains(view, "Recent Logins") {
-		t.Error("view should show Recent Logins header")
+	if !strings.Contains(view, "Recent Connections") {
+		t.Error("view should show Recent Connections header")
 	}
 	if !strings.Contains(view, "admin@host1.example.com:22") {
 		t.Error("view should show first recent login")
@@ -960,8 +950,8 @@ func TestViewNoRecentLoginsWhenEmpty(t *testing.T) {
 	m.width = 120
 	m.height = 40
 	view := m.View()
-	if strings.Contains(view, "Recent Logins") {
-		t.Error("view should not show Recent Logins when there are none")
+	if strings.Contains(view, "Recent Connections") {
+		t.Error("view should not show Recent Connections when there are none")
 	}
 }
 
@@ -978,7 +968,7 @@ func TestViewRecentLoginsMaxEight(t *testing.T) {
 	m.height = 40
 	view := m.View()
 	if !strings.Contains(view, "u@h8:22") {
-		t.Error("should show up to 8 recent logins")
+		t.Error("should show up to 8 recent connections")
 	}
 	if strings.Contains(view, "u@h9:22") {
 		t.Error("should not show 9th recent login")
@@ -1187,7 +1177,8 @@ func TestCtrlRightFromRecentPane(t *testing.T) {
 			{Host: "h1", Port: "22", Username: "u1"},
 		},
 	}
-	m := NewConnectionModelWithSSH(cfg, nil)
+	hosts := []config.SSHHost{{Alias: "srv", HostName: "h2", User: "u2", Port: "22"}}
+	m := NewConnectionModelWithSSH(cfg, hosts)
 	m.activePane = paneRecent
 
 	ctrlRight := tea.KeyMsg{Type: tea.KeyCtrlRight}

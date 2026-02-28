@@ -53,6 +53,7 @@ type ConnectionModel struct {
 	hasItems      bool
 	activePane    connectionPane
 	recentIdx     int
+	selectedName  string // SSH config alias; empty for manual entries
 	cfg           *config.Config
 	sshHosts      []config.SSHHost
 	width         int
@@ -126,13 +127,10 @@ func NewConnectionModelWithSSH(cfg *config.Config, sshHosts []config.SSHHost) Co
 	inputs[fieldKnownHostsFile].Placeholder = "/dev/null (optional)"
 	inputs[fieldHost].Focus()
 
-	// Build combined list: SSH config hosts first, then recent connections.
+	// Build list from SSH config hosts.
 	var items []list.Item
 	for _, h := range sshHosts {
 		items = append(items, connItem{conn: h.ToConnection(), source: "ssh-config"})
-	}
-	for _, c := range cfg.RecentConnections {
-		items = append(items, connItem{conn: c, source: "recent"})
 	}
 
 	delegate := list.NewDefaultDelegate()
@@ -193,7 +191,7 @@ func (m ConnectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.activePane == paneRecent {
-				// Select from recent logins.
+				// Select from recent connections.
 				max := len(m.cfg.RecentConnections)
 				if max > 8 {
 					max = 8
@@ -311,6 +309,11 @@ func (m ConnectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.inputs[m.focused], cmd = m.inputs[m.focused].Update(msg)
+	// Clear the selected name when the user manually edits form fields
+	// so that only connections chosen from the list/recent carry a name.
+	if _, ok := msg.(tea.KeyMsg); ok {
+		m.selectedName = ""
+	}
 	return m, cmd
 }
 
@@ -401,6 +404,7 @@ func (m *ConnectionModel) fillForm(c config.Connection) {
 	m.inputs[fieldJump].SetValue(c.ProxyJump)
 	m.inputs[fieldHostKeyCheck].SetValue(c.StrictHostKeyChecking)
 	m.inputs[fieldKnownHostsFile].SetValue(c.UserKnownHostsFile)
+	m.selectedName = c.Name
 
 	// Auto-expand advanced section if any advanced field has a non-default value.
 	m.showAdvanced = (c.Port != "" && c.Port != "22") ||
@@ -429,7 +433,7 @@ func (m *ConnectionModel) submitForm() tea.Cmd {
 	}
 
 	conn := config.Connection{
-		Name:                  fmt.Sprintf("%s@%s", user, host),
+		Name:                  m.selectedName,
 		Host:                  host,
 		Port:                  port,
 		Username:              user,
@@ -445,7 +449,8 @@ var (
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("#7D56F4")).
-			Padding(0, 1)
+			Align(lipgloss.Center).
+			Width(50)
 
 	labelStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#888888")).
@@ -453,7 +458,7 @@ var (
 
 	inputBoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#444444")).
+			BorderForeground(lipgloss.Color("#555555")).
 			Padding(1, 2).
 			Width(50)
 
@@ -461,7 +466,7 @@ var (
 				BorderForeground(lipgloss.Color("#7D56F4"))
 
 	dimBoxStyle = inputBoxStyle.
-			BorderForeground(lipgloss.Color("#333333"))
+			BorderForeground(lipgloss.Color("#555555"))
 
 	errorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF5555")).
@@ -471,7 +476,13 @@ var (
 func (m ConnectionModel) View() string {
 	basicFields := []connectionField{fieldHost, fieldUser}
 	basicLabels := []string{"Host:", "Username:"}
+
+	formTitleStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("62")).
+		Foreground(lipgloss.Color("230")).
+		Padding(0, 1)
 	var rows []string
+	rows = append(rows, formTitleStyle.Render("New Connection"), "")
 	for i, f := range basicFields {
 		label := labelStyle.Render(basicLabels[i])
 		row := lipgloss.JoinHorizontal(lipgloss.Center, label, m.inputs[f].View())
@@ -509,7 +520,7 @@ func (m ConnectionModel) View() string {
 	}
 	box := boxStyle.Render(form)
 
-	title := titleStyle.Render("SSH TUI - New Connection")
+	title := titleStyle.Render("╔═╗╔═╗╦ ╦  ╔═╗╔═╗╔═╗\n╚═╗╚═╗╠═╣  ╚═╗║  ╠═╝\n╚═╝╚═╝╩ ╩  ╚═╝╚═╝╩  ")
 
 	// Status bar — always present with a max width to prevent layout disruption.
 	maxWidth := 44 // inputBoxStyle width (50) minus border/padding (6)
@@ -518,6 +529,7 @@ func (m ConnectionModel) View() string {
 	}
 
 	var statusText string
+	statusMsg := ""
 	if m.connecting {
 		statusText = "⟳  Connecting to " + m.connectTarget + "…"
 		if len(statusText) > maxWidth && maxWidth > 3 {
@@ -526,20 +538,17 @@ func (m ConnectionModel) View() string {
 		statusText = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#7D56F4")).Bold(true).
 			Render(statusText)
+		statusMsg = statusText
 	} else if m.err != "" {
 		errText := "⚠  " + m.err
 		if len(errText) > maxWidth && maxWidth > 3 {
 			errText = errText[:maxWidth-1] + "…"
 		}
 		statusText = errorStyle.Render(errText)
-	} else {
-		statusText = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#555555")).
-			Render("Enter connection details and press Enter")
+		statusMsg = statusText
 	}
-	statusMsg := statusText
 
-	// Recent logins section.
+	// recent connections section.
 	var recentSection string
 	if len(m.cfg.RecentConnections) > 0 {
 		recentTitleBarStyle := lipgloss.NewStyle().Padding(0, 0, 0, 2)
@@ -547,7 +556,7 @@ func (m ConnectionModel) View() string {
 			Background(lipgloss.Color("62")).
 			Foreground(lipgloss.Color("230")).
 			Padding(0, 1)
-		recentHeader := recentTitleBarStyle.Render(recentTitleStyle.Render("Recent Logins"))
+		recentHeader := recentTitleBarStyle.Render(recentTitleStyle.Render("Recent Connections"))
 
 		normalStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#dddddd"}).
@@ -582,9 +591,9 @@ func (m ConnectionModel) View() string {
 		recentContent := recentHeader + "\n\n" + strings.Join(recentRows, "\n")
 		var recentBoxStyle lipgloss.Style
 		if m.activePane == paneRecent {
-			recentBoxStyle = focusedInputBoxStyle.Width(46)
+			recentBoxStyle = focusedInputBoxStyle
 		} else {
-			recentBoxStyle = dimBoxStyle.Width(46)
+			recentBoxStyle = dimBoxStyle
 		}
 		recentSection = recentBoxStyle.Render(recentContent)
 	}

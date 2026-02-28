@@ -504,7 +504,7 @@ func (m FileBrowserModel) executeRename(newName string) (FileBrowserModel, tea.C
 var (
 	panelStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#444444")).
+			BorderForeground(lipgloss.Color("#555555")).
 			Padding(0, 1)
 
 	activePanelStyle = panelStyle.
@@ -526,7 +526,7 @@ var (
 			Foreground(lipgloss.Color("#AAAAAA")).
 			BorderBottom(true).
 			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("#444444"))
+			BorderForeground(lipgloss.Color("#555555"))
 
 	statusBarStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#888888")).
@@ -670,7 +670,7 @@ func (m FileBrowserModel) View() string {
 	}
 
 	statusLine := statusBarStyle.Render(
-		fmt.Sprintf(" ←/→: panels • ^T: transfer • ^K: mkdir • ^D: delete • ^R: rename | %s", m.statusMsg),
+		fmt.Sprintf(" ^←/→: panels • ^T: transfer • ^K: mkdir • ^D: delete • ^R: rename | %s", m.statusMsg),
 	)
 
 	return lipgloss.JoinVertical(lipgloss.Left, panels, statusLine)

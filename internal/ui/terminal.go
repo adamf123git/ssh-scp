@@ -164,7 +164,7 @@ func (m *TerminalModel) BufferedOutput() string {
 var (
 	terminalStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#444444")).
+			BorderForeground(lipgloss.Color("#555555")).
 			Padding(0, 1)
 
 	activeTerminalStyle = terminalStyle.

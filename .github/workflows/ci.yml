@@ -32,6 +32,7 @@ jobs:
 
       - name: Format check
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           make fmt
           git diff --exit-code || (echo "FAIL: go fmt produced changes — please run 'make fmt' and commit"; exit 1)
 
